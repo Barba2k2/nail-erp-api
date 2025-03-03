@@ -14,16 +14,17 @@ datasource db {
 }
 
 model User {
-  id          Int       @id @default(autoincrement())
-  email       String    @unique
-  password    String
-  name        String
-  role        UserRole
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                   Int       @id @default(autoincrement())
+  email                String    @unique
+  password             String
+  name                 String
+  role                 UserRole
+  passwordResetToken   String?   // para recuperação de senha
+  passwordResetExpires DateTime? // expiração do token
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  // Relação com agendamentos
-  appointments Appointment[] @relation("UserAppointments")
+  appointments         Appointment[] @relation("UserAppointments")
 }
 
 enum UserRole {
@@ -39,7 +40,6 @@ model Appointment {
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
-  // Relações
   userId     Int
   user       User               @relation("UserAppointments", fields: [userId], references: [id])
   serviceId  Int
@@ -64,6 +64,5 @@ model Service {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  // Relação com agendamentos
   appointments Appointment[]
 }
