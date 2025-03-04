@@ -6,11 +6,15 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: any) {
+    const existingUser = await this.findByEmail(data.email);
+    if (existingUser) {
+      throw new Error('Email já cadastrado.');
+    }
     return this.prisma.user.create({
       data: {
         email: data.email,
         password: data.password,
-        role: data.role, // 'CLIENT' ou 'PROFESSIONAL'
+        role: data.role,
         name: data.name,
       },
     });
