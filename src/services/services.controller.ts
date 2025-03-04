@@ -1,8 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
-import { ServicesService } from "./services.service";
-import { JwtAuthGuard } from "src/auth/jwt/jwt-auth.guard";
-import { RolesGuard } from "src/auth/decorator/roles.guard";
-import { Roles } from "src/auth/decorator/roler.decorator";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { ServicesService } from './services.service';
+import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/decorator/roles.guard';
+import { Roles } from 'src/auth/decorator/roles.decorator';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PROFESSIONAL')
