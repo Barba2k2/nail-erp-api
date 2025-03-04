@@ -46,7 +46,6 @@ describe('AppointmentsService', () => {
     prismaService = module.get<PrismaService>(PrismaService);
     settingsService = module.get<SettingsService>(SettingsService);
 
-    // Reset all mocks before each test
     jest.clearAllMocks();
   });
 
@@ -152,10 +151,8 @@ describe('AppointmentsService', () => {
       expect(result).toHaveProperty('slots');
       expect(Array.isArray(result.slots)).toBe(true);
 
-      // should have slots between 8:00 and 18:00 with 30 min intervals
       expect(result.slots.length).toBeGreaterThan(0);
 
-      // Check if service was properly looked up
       expect(mockPrismaService.service.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
       });
@@ -164,7 +161,6 @@ describe('AppointmentsService', () => {
     it('should handle closed business days', async () => {
       const query = { date: '2025-03-10', serviceId: 1 };
 
-      // Mock that the business is closed
       mockSettingsService.getBusinessHoursForDate.mockResolvedValueOnce({
         isOpen: false,
       });
