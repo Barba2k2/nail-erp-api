@@ -28,7 +28,6 @@ export class AppointmentsService {
       throw new BadRequestException('ID de usuário válido é necessário');
     }
 
-    // Combina a data e horário em um único objeto Date
     const combinedDate = this.combineDateAndTime(
       data.appointmentDate,
       data.appointmentTime,
@@ -63,7 +62,6 @@ export class AppointmentsService {
   }
 
   async reschedule(id: number, data: RescheduleAppointmentDto) {
-    // Combina a data e horário em um único objeto Date
     const combinedDate = this.combineDateAndTime(
       data.appointmentDate,
       data.appointmentTime,
@@ -90,17 +88,14 @@ export class AppointmentsService {
   async getAvailableSlots(query: AvailableSlotsDto) {
     const { date, serviceId } = query;
 
-    // Validar e converter a data
     const selectedDate = new Date(date);
     if (isNaN(selectedDate.getTime())) {
       throw new BadRequestException('Data inválida');
     }
 
-    // Obter configurações de horário para a data
     const businessHours =
       await this.settingsService.getBusinessHoursForDate(selectedDate);
 
-    // Se o estabelecimento estiver fechado neste dia, retorna array vazio
     if (!businessHours.isOpen) {
       return {
         date: selectedDate.toISOString().split('T')[0],
@@ -109,17 +104,14 @@ export class AppointmentsService {
       };
     }
 
-    // Converter string HH:MM para horas numéricas com valores padrão se undefined
     const openTimeStr = businessHours.openTime || '08:00';
     const closeTimeStr = businessHours.closeTime || '18:00';
 
     const start = parseInt(openTimeStr.split(':')[0]);
     const end = parseInt(closeTimeStr.split(':')[0]);
 
-    // Intervalo padrão entre slots (30 minutos)
     const slotDuration = 30;
 
-    // Se um serviço específico foi solicitado, obter sua duração
     let serviceDuration = slotDuration;
     let selectedServiceData: Service | null = null;
 
@@ -136,14 +128,12 @@ export class AppointmentsService {
       selectedServiceData = service;
     }
 
-    // Definir início e fim do dia
     const startOfDay = new Date(selectedDate);
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(selectedDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Buscar agendamentos existentes no dia
     const appointments = await this.prisma.appointment.findMany({
       where: {
         date: {
@@ -162,7 +152,6 @@ export class AppointmentsService {
       },
     });
 
-    // Buscar bloqueios de horário
     let timeBlocks: TimeBlock[] = [];
     try {
       timeBlocks = await this.prisma.timeBlock.findMany({
@@ -177,7 +166,6 @@ export class AppointmentsService {
       console.error('Erro ao buscar bloqueios de horário:', error);
     }
 
-    // Gerar todos os possíveis slots
     const slots: TimeSlot[] = [];
     const slotCount = ((end - start) * 60) / slotDuration;
 
@@ -190,7 +178,6 @@ export class AppointmentsService {
         0,
       );
 
-      // Verificar se o slot tem duração suficiente antes do fechamento
       const slotEndTime = new Date(slotTime);
       slotEndTime.setMinutes(slotEndTime.getMinutes() + serviceDuration);
 
@@ -199,10 +186,9 @@ export class AppointmentsService {
       businessEndTime.setHours(endHour, endMinute, 0, 0);
 
       if (slotEndTime > businessEndTime) {
-        continue; // Pular este slot se ultrapassar o horário de fechamento
+        continue;
       }
 
-      // Verificar se o slot está disponível (não conflita com agendamentos existentes)
       const isAvailable = !appointments.some((appointment) => {
         const appointmentStart = appointment.date;
         const appointmentEnd = new Date(appointment.date);
@@ -210,15 +196,12 @@ export class AppointmentsService {
           appointmentEnd.getMinutes() + appointment.service.duration,
         );
 
-        // Verificar sobreposição
         return slotTime < appointmentEnd && slotEndTime > appointmentStart;
       });
 
-      // Verificar se o slot está bloqueado por um bloqueio administrativo
       const isBlocked =
         timeBlocks.length > 0 &&
         timeBlocks.some((block) => {
-          // Assegurar que as datas são objetos Date
           const blockStart =
             block.startTime instanceof Date
               ? block.startTime
@@ -228,7 +211,6 @@ export class AppointmentsService {
               ? block.endTime
               : new Date(block.endTime);
 
-          // Verificar sobreposição
           return slotTime < blockEnd && slotEndTime > blockStart;
         });
 
@@ -250,17 +232,13 @@ export class AppointmentsService {
     };
   }
 
-  // Função auxiliar para combinar data e hora em um objeto Date
   private combineDateAndTime(dateStr: string, timeStr: string): Date {
     try {
-      // Formato esperado: dateStr = "YYYY-MM-DD", timeStr = "HH:MM"
       const [year, month, day] = dateStr.split('-').map(Number);
       const [hours, minutes] = timeStr.split(':').map(Number);
 
-      // Cria um novo objeto Date (mês em JS é 0-indexado, então subtraímos 1)
       const date = new Date(year, month - 1, day, hours, minutes);
 
-      // Verifica se a data é válida
       if (isNaN(date.getTime())) {
         throw new BadRequestException('Data ou horário inválido');
       }
