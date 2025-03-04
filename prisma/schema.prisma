@@ -66,3 +66,38 @@ model Service {
 
   appointments Appointment[]
 }
+
+model TimeBlock {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BusinessSettings {
+  id              Int       @id @default(autoincrement())
+  dayOfWeek       Int       // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  isOpen          Boolean   @default(true)
+  openTime        String    @default("08:00") // Formato HH:MM
+  closeTime       String    @default("18:00") // Formato HH:MM
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([dayOfWeek])
+}
+
+model SpecialBusinessDay {
+  id              Int       @id @default(autoincrement())
+  date            DateTime  // Data específica
+  isOpen          Boolean   @default(true)
+  openTime        String?   // Se diferente do normal
+  closeTime       String?   // Se diferente do normal
+  reason          String?   // Motivo para horário especial/fechamento
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([date])
+}
