@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
+  ParseIntPipe,
   Post,
   Put,
   UseGuards,
@@ -30,8 +32,12 @@ export class ServicesController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: number) {
-    return this.servicesService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    const service = await this.servicesService.findOne(id);
+    if (!service) {
+      throw new NotFoundException(`Service with ID ${id} not found`);
+    }
+    return service;
   }
 
   @Put(':id')

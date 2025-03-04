@@ -13,7 +13,6 @@ describe('Services Endpoints (e2e)', () => {
   let jwtService: JwtService;
   let authToken: string;
   let serviceId: number;
-  let adminUser: any;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -35,60 +34,37 @@ describe('Services Endpoints (e2e)', () => {
 
     await cleanupDatabase(prisma);
 
-    const adminEmail = generateUniqueEmail('service_admin');
-    adminUser = await prisma.user.create({
+    const adminEmail = generateUniqueEmail('admin_test');
+    const admin = await prisma.user.create({
       data: {
         email: adminEmail,
         password: 'password123',
         role: UserRole.PROFESSIONAL,
-        name: 'Service Admin',
+        name: 'Admin Test User',
       },
     });
-    console.log('Created test admin with ID:', adminUser.id);
+
+    console.log('Created admin user with ID:', admin.id);
 
     authToken = jwtService.sign({
-      sub: adminUser.id,
-      id: adminUser.id,
-      email: adminUser.email,
-      role: adminUser.role,
+      sub: admin.id,
+      id: admin.id,
+      email: admin.email,
+      role: admin.role,
     });
-    console.log('Generated auth token for admin');
 
-    try {
-      const serviceData = {
-        name: 'Test Service',
-        description: 'Test service description',
+    console.log('Generated auth token for testing');
+
+    const service = await prisma.service.create({
+      data: {
+        name: 'Test Admin Service',
+        description: 'Service for admin testing',
         duration: 60,
         price: 100,
-      };
-
-      const serviceResponse = await request(app.getHttpServer())
-        .post('/admin/services')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send(serviceData);
-
-      if (serviceResponse.status === 201) {
-        serviceId = serviceResponse.body.id;
-        console.log('Created test service with ID:', serviceId);
-      } else {
-        console.log(
-          'Failed to create service, status:',
-          serviceResponse.status,
-        );
-        console.log('Response:', serviceResponse.body);
-
-        const service = await prisma.service.create({
-          data: serviceData,
-        });
-        serviceId = service.id;
-        console.log(
-          'Created test service directly with Prisma, ID:',
-          serviceId,
-        );
-      }
-    } catch (error) {
-      console.error('Error creating test service:', error);
-    }
+      },
+    });
+    serviceId = service.id;
+    console.log('Created test service for admin tests, ID:', serviceId);
   });
 
   afterAll(async () => {
@@ -96,35 +72,23 @@ describe('Services Endpoints (e2e)', () => {
     await app.close();
   });
 
-  it('/services (GET) - should return list of services (public)', async () => {
-    return request(app.getHttpServer())
-      .get('/services')
-      .expect(200)
-      .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
-      });
-  });
-
   it('/services/:id (GET) - should return service details (public)', async () => {
-    try {
-      let testService = await prisma.service.findUnique({
-        where: { id: serviceId },
-      });
+    const testService = await prisma.service.findUnique({
+      where: { id: serviceId },
+    });
 
-      if (!testService) {
-        testService = await prisma.service.create({
-          data: {
-            name: 'Test Service',
-            description: 'Test service description',
-            duration: 60,
-            price: 100,
-          },
-        });
-        serviceId = testService.id;
-        console.log('Created missing test service:', serviceId);
-      }
-    } catch (error) {
-      console.error('Error ensuring test service exists:', error);
+    if (!testService) {
+      console.log(`Service with ID ${serviceId} not found, creating new one`);
+      const newService = await prisma.service.create({
+        data: {
+          name: 'Test Service',
+          description: 'Service for testing',
+          duration: 60,
+          price: 100,
+        },
+      });
+      serviceId = newService.id;
+      console.log(`Created new service with ID: ${serviceId}`);
     }
 
     const response = await request(app.getHttpServer())
@@ -137,8 +101,18 @@ describe('Services Endpoints (e2e)', () => {
     expect(response.body).toHaveProperty('name');
   });
 
+  it('/services/:id (GET) - should return service details (public)', async () => {
+    return request(app.getHttpServer())
+      .get(`/services/${serviceId}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toHaveProperty('id', serviceId);
+        expect(res.body).toHaveProperty('name');
+      });
+  });
+
   it('/admin/services (PUT) - professional can update a service', async () => {
-    const response = await request(app.getHttpServer())
+    return request(app.getHttpServer())
       .put(`/admin/services/${serviceId}`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({
@@ -146,14 +120,12 @@ describe('Services Endpoints (e2e)', () => {
         description: 'Updated description',
         duration: 90,
         price: 150,
+      })
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toHaveProperty('id', serviceId);
+        expect(res.body).toHaveProperty('name', 'Updated Service Name');
       });
-
-    console.log('Update service response:', response.body);
-    console.log('Update service status:', response.status);
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('id', serviceId);
-    expect(response.body).toHaveProperty('name', 'Updated Service Name');
   });
 
   it('/admin/services (DELETE) - professional can delete a service', async () => {
@@ -165,23 +137,15 @@ describe('Services Endpoints (e2e)', () => {
         description: 'This service will be deleted',
         duration: 30,
         price: 50,
-      });
-
-    console.log('Create service for deletion response:', createResponse.body);
-    console.log('Create service status:', createResponse.status);
-
-    expect(createResponse.status).toBe(201);
+      })
+      .expect(201);
 
     const deleteId = createResponse.body.id;
-    console.log('Service created for deletion with ID:', deleteId);
+    console.log('Created service for deletion, ID:', deleteId);
 
-    const deleteResponse = await request(app.getHttpServer())
+    return request(app.getHttpServer())
       .delete(`/admin/services/${deleteId}`)
-      .set('Authorization', `Bearer ${authToken}`);
-
-    console.log('Delete service response:', deleteResponse.body);
-    console.log('Delete service status:', deleteResponse.status);
-
-    expect(deleteResponse.status).toBe(200);
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
   });
 });

@@ -75,8 +75,12 @@ describe('ClientsService', () => {
         date: new Date('2025-03-10T10:00:00'),
         status: AppointmentStatus.SCHEDULED,
         notes: 'Test appointment',
-        userId: user.id,
-        serviceId: service.id,
+        user: {
+          connect: { id: userId },
+        },
+        service: {
+          connect: { id: serviceId },
+        },
       },
     });
     appointmentId = appointment.id;
