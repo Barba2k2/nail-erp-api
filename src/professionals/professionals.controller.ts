@@ -14,20 +14,21 @@ import { RolesGuard } from 'src/auth/decorator/roles.guard';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { ProfessionalsService } from './professionals.service';
 
-@Controller('professionals')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PROFESSIONAL')
+@Controller('admin')
 export class ProfessionalsController {
   constructor(private readonly professionalsService: ProfessionalsService) {}
 
   @Get('profile')
   async getProfile(@Req() req) {
-    return this.professionalsService.getProfile(req.user.userId);
+    console.log('User from token:', req.user);
+    return this.professionalsService.getProfile(req.user.id);
   }
 
   @Put('profile')
   async updateProfile(@Req() req, @Body() data: any) {
-    return this.professionalsService.updateProfile(req.user.userId, data);
+    return this.professionalsService.updateProfile(req.user.id, data);
   }
 
   @Get('appointments')
