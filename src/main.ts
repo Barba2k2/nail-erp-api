@@ -12,10 +12,14 @@ async function bootstrap() {
   app.enableCors();
 
   // Validação global
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
-  // Porta via ConfigService
-  const configService = app.get(ConfigService);
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`Aplicação rodando em ${await app.getUrl()}`);
