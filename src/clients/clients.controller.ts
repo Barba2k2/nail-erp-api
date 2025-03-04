@@ -24,13 +24,13 @@ export class ClientsController {
   @Roles('CLIENT')
   @Get('profile')
   async getProfile(@Req() req) {
-    return this.clientsService.getProfile(req.user.userId);
+    return this.clientsService.getProfile(req.user.id);
   }
 
   @Roles('CLIENT')
   @Put('profile')
   async updateProfile(@Req() req, @Body() data: any) {
-    return this.clientsService.updateProfile(req.user.userId, data);
+    return this.clientsService.updateProfile(req.user.id, data);
   }
 
   // Endpoints de agendamentos: podem ser acessados tanto por CLIENT quanto por PROFESSIONAL
@@ -44,7 +44,18 @@ export class ClientsController {
   @Roles('CLIENT', 'PROFESSIONAL')
   @Post('appointments')
   async createAppointment(@Req() req, @Body() data: any) {
-    return this.clientsService.createAppointment(req.user.userId, data);
+    // Adicione logs para depuração
+    console.log('Req user:', req.user);
+
+    if (!req.user || !req.user.id) {
+      throw new Error('Usuário não autenticado ou ID ausente no token');
+    }
+
+    // Se você quiser depurar ainda mais
+    console.log('User ID:', req.user.id);
+    console.log('Request data:', data);
+
+    return this.clientsService.createAppointment(req.user.id, data);
   }
 
   @Roles('CLIENT', 'PROFESSIONAL')
