@@ -10,9 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ClientsService } from './clients.service';
-import { RolesGuard } from 'src/auth/decorator/roles.guard';
-import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
-import { Roles } from 'src/auth/decorator/roler.decorator';
+import { RolesGuard } from '../auth/decorator/roles.guard';
+import { JwtAuthGuard } from '../auth/jwt/jwt-auth.guard';
+import { Roles } from '../auth/decorator/roles.decorator';
+import { DateUtils } from '../utils/date.utils';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('client')
@@ -20,7 +21,6 @@ export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   // Endpoints de perfil: apenas CLIENT pode acessar
-
   @Roles('CLIENT')
   @Get('profile')
   async getProfile(@Req() req) {
@@ -34,11 +34,16 @@ export class ClientsController {
   }
 
   // Endpoints de agendamentos: podem ser acessados tanto por CLIENT quanto por PROFESSIONAL
-
   @Roles('CLIENT', 'PROFESSIONAL')
   @Get('appointments')
   async getAppointments(@Req() req) {
-    return this.clientsService.getAppointments(req.user.userId);
+    const appointments = await this.clientsService.getAppointments(req.user.id);
+
+    // Adiciona campos separados de data e hora para cada agendamento
+    return appointments.map((appointment) => ({
+      ...appointment,
+      ...DateUtils.formatAppointmentDateTime(appointment.date),
+    }));
   }
 
   @Roles('CLIENT', 'PROFESSIONAL')
@@ -55,18 +60,42 @@ export class ClientsController {
     console.log('User ID:', req.user.id);
     console.log('Request data:', data);
 
-    return this.clientsService.createAppointment(req.user.id, data);
+    const appointment = await this.clientsService.createAppointment(
+      req.user.id,
+      data,
+    );
+
+    // Retorna o agendamento com data e hora separados
+    return {
+      ...appointment,
+      ...DateUtils.formatAppointmentDateTime(appointment.date),
+    };
   }
 
   @Roles('CLIENT', 'PROFESSIONAL')
   @Put('appointments/:id/reschedule')
   async rescheduleAppointment(@Param('id') id: string, @Body() data: any) {
-    return this.clientsService.rescheduleAppointment(Number(id), data);
+    const appointment = await this.clientsService.rescheduleAppointment(
+      Number(id),
+      data,
+    );
+
+    // Retorna o agendamento com data e hora separados
+    return {
+      ...appointment,
+      ...DateUtils.formatAppointmentDateTime(appointment.date),
+    };
   }
 
   @Roles('CLIENT', 'PROFESSIONAL')
   @Delete('appointments/:id')
   async cancelAppointment(@Param('id') id: string) {
-    return this.clientsService.cancelAppointment(Number(id));
+    const appointment = await this.clientsService.cancelAppointment(Number(id));
+
+    // Retorna o agendamento com data e hora separados
+    return {
+      ...appointment,
+      ...DateUtils.formatAppointmentDateTime(appointment.date),
+    };
   }
 }
