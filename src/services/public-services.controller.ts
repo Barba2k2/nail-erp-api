@@ -11,7 +11,7 @@ export class PublicServicesController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: number) {
-    return this.servicesService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    return this.servicesService.findOne(Number(id));
   }
 }
