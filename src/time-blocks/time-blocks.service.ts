@@ -43,23 +43,19 @@ export class TimeBlocksService {
   async create(data: CreateTimeBlockDto) {
     const { date, startTime, endTime, reason } = data;
 
-    // Converter data para objeto Date
     const blockDate = new Date(date);
     if (isNaN(blockDate.getTime())) {
       throw new BadRequestException('Data inválida');
     }
 
-    // Converter horário de início
     const [startHour, startMinute] = startTime.split(':').map(Number);
     const startDateTime = new Date(blockDate);
     startDateTime.setHours(startHour, startMinute, 0, 0);
 
-    // Converter horário de fim
     const [endHour, endMinute] = endTime.split(':').map(Number);
     const endDateTime = new Date(blockDate);
     endDateTime.setHours(endHour, endMinute, 0, 0);
 
-    // Validar que o fim é depois do início
     if (endDateTime <= startDateTime) {
       throw new BadRequestException(
         'A hora de fim deve ser posterior à hora de início',
@@ -79,23 +75,19 @@ export class TimeBlocksService {
   async update(id: number, data: UpdateTimeBlockDto) {
     const { date, startTime, endTime, reason } = data;
 
-    // Converter data para objeto Date
     const blockDate = new Date(date);
     if (isNaN(blockDate.getTime())) {
       throw new BadRequestException('Data inválida');
     }
 
-    // Converter horário de início
     const [startHour, startMinute] = startTime.split(':').map(Number);
     const startDateTime = new Date(blockDate);
     startDateTime.setHours(startHour, startMinute, 0, 0);
 
-    // Converter horário de fim
     const [endHour, endMinute] = endTime.split(':').map(Number);
     const endDateTime = new Date(blockDate);
     endDateTime.setHours(endHour, endMinute, 0, 0);
 
-    // Validar que o fim é depois do início
     if (endDateTime <= startDateTime) {
       throw new BadRequestException(
         'A hora de fim deve ser posterior à hora de início',
