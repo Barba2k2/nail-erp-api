@@ -4,9 +4,9 @@ import { JwtAuthGuard } from "src/auth/jwt/jwt-auth.guard";
 import { RolesGuard } from "src/auth/decorator/roles.guard";
 import { Roles } from "src/auth/decorator/roler.decorator";
 
-@Controller('services')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PROFESSIONAL')
+@Controller('admin/services')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
