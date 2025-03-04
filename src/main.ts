@@ -7,11 +7,9 @@ import { ConfigService } from '@nestjs/config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Segurança
   app.use(helmet());
   app.enableCors();
 
-  // Validação global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
