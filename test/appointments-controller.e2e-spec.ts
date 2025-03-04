@@ -28,7 +28,6 @@ describe('AppointmentsController', () => {
     controller = module.get<AppointmentsController>(AppointmentsController);
     service = module.get<AppointmentsService>(AppointmentsService);
 
-    // Reset all mocks before each test
     jest.clearAllMocks();
   });
 
