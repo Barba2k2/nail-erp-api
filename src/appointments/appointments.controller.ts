@@ -26,7 +26,6 @@ export class AppointmentsController {
   async findAll() {
     const appointments = await this.appointmentsService.findAll();
 
-    // Adiciona campos separados de data e hora para cada agendamento
     return appointments.map((appointment) => ({
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
@@ -44,7 +43,6 @@ export class AppointmentsController {
       data,
     );
 
-    // Retorna o agendamento com data e hora separados
     return {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
@@ -55,12 +53,10 @@ export class AppointmentsController {
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const appointment = await this.appointmentsService.findOne(id);
 
-    // Verifica se o agendamento foi encontrado
     if (!appointment) {
       throw new NotFoundException(`Agendamento com ID ${id} não encontrado`);
     }
 
-    // Retorna o agendamento com data e hora separados
     return {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
@@ -74,7 +70,6 @@ export class AppointmentsController {
   ) {
     const appointment = await this.appointmentsService.reschedule(id, data);
 
-    // Retorna o agendamento com data e hora separados
     return {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
@@ -85,7 +80,6 @@ export class AppointmentsController {
   async cancel(@Param('id', ParseIntPipe) id: number) {
     const appointment = await this.appointmentsService.cancel(id);
 
-    // Retorna o agendamento com data e hora separados
     return {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
