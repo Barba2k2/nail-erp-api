@@ -1,5 +1,4 @@
-import { DateUtils } from "src/utils/date.utils";
-
+import { DateUtils } from 'src/utils/date.utils';
 
 describe('DateUtils', () => {
   describe('extractDate', () => {
