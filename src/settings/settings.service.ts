@@ -19,18 +19,16 @@ export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async initializeDefaultHours() {
-    // Verifica se já há configurações
     const existing = await this.prisma.businessSettings.count();
     if (existing > 0) {
       return { message: 'Configurações de horário já existem' };
     }
 
-    // Cria os horários padrão para todos os dias da semana
     const days: BusinessHoursSettings[] = [];
     for (let i = 0; i < 7; i++) {
       days.push({
         dayOfWeek: i,
-        isOpen: i !== 0, // Fechado aos domingos por padrão
+        isOpen: i !== 0,
         openTime: '08:00',
         closeTime: '18:00',
       });
@@ -134,14 +132,11 @@ export class SettingsService {
     });
   }
 
-  // Método que será chamado pelo AppointmentsService
   async getBusinessHoursForDate(date: Date) {
-    // Criar uma cópia da data para não modificar a original
     const dateCopy = new Date(date);
-    // Definir para o início do dia
+
     const startOfDay = new Date(dateCopy.setHours(0, 0, 0, 0));
 
-    // Verifica se há configuração especial para a data usando findFirst
     const specialDay = await this.prisma.specialBusinessDay.findFirst({
       where: {
         date: startOfDay,
@@ -160,14 +155,12 @@ export class SettingsService {
       };
     }
 
-    // Caso não haja configuração especial, usa a do dia da semana
-    const dayOfWeek = date.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+    const dayOfWeek = date.getDay();
     const defaultSettings = await this.prisma.businessSettings.findUnique({
       where: { dayOfWeek },
     });
 
     if (!defaultSettings) {
-      // Se não houver configuração, assume horário comercial padrão
       return {
         isOpen: true,
         openTime: '08:00',
