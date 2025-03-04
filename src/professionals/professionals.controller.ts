@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Roles } from 'src/auth/decorator/roler.decorator';
+import { Roles } from 'src/auth/decorator/roles.decorator';
 import { RolesGuard } from 'src/auth/decorator/roles.guard';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { ProfessionalsService } from './professionals.service';
