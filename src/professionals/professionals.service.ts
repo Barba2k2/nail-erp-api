@@ -31,7 +31,6 @@ export class ProfessionalsService {
   }
 
   async getServices(userId: number) {
-    // Opcionalmente, filtrar serviços do profissional
     return this.prisma.service.findMany();
   }
 
