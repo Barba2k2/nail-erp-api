@@ -5,7 +5,19 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { AppointmentStatus, UserRole } from '@prisma/client';
-import { DateUtils } from '../src/utils/date.utils';
+import { SettingsService } from '../src/settings/settings.service';
+import { cleanupDatabase, generateUniqueEmail } from './test-utils';
+
+// Definir um mock para o SettingsService
+class MockSettingsService {
+  async getBusinessHoursForDate(date: Date) {
+    return {
+      isOpen: true,
+      openTime: '08:00',
+      closeTime: '18:00',
+    };
+  }
+}
 
 describe('Appointments E2E Tests', () => {
   let app: INestApplication;
@@ -20,7 +32,10 @@ describe('Appointments E2E Tests', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(SettingsService)
+      .useClass(MockSettingsService)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
@@ -35,36 +50,38 @@ describe('Appointments E2E Tests', () => {
 
     await app.init();
 
-    // Limpa banco de dados de teste e cria dados de teste
+    // Limpar banco de dados
+    await cleanupDatabase(prisma);
+
+    // Criar dados de teste
     await setupTestData();
   });
 
   async function setupTestData() {
-    // Limpar dados existentes
-    await prisma.appointment.deleteMany();
-    await prisma.service.deleteMany();
-    await prisma.user.deleteMany();
-
     // Criar usuário de teste (cliente)
+    const clientEmail = generateUniqueEmail('client_e2e');
     const clientUser = await prisma.user.create({
       data: {
         name: 'Test Client',
-        email: 'client@example.com',
+        email: clientEmail,
         password: 'password123',
         role: UserRole.CLIENT,
       },
     });
     testUserId = clientUser.id;
+    console.log('Created test client with ID:', testUserId);
 
     // Criar usuário profissional
+    const professionalEmail = generateUniqueEmail('professional_e2e');
     const professionalUser = await prisma.user.create({
       data: {
         name: 'Test Professional',
-        email: 'professional@example.com',
+        email: professionalEmail,
         password: 'password123',
         role: UserRole.PROFESSIONAL,
       },
     });
+    console.log('Created test professional with ID:', professionalUser.id);
 
     // Criar serviço de teste
     const service = await prisma.service.create({
@@ -76,11 +93,12 @@ describe('Appointments E2E Tests', () => {
       },
     });
     testServiceId = service.id;
+    console.log('Created test service with ID:', testServiceId);
 
     // Criar um agendamento de teste
     const appointment = await prisma.appointment.create({
       data: {
-        date: new Date('2025-03-20T10:00:00'),
+        date: new Date('2025-03-20T10:00:00Z'),
         status: AppointmentStatus.SCHEDULED,
         notes: 'Test appointment',
         userId: clientUser.id,
@@ -88,6 +106,7 @@ describe('Appointments E2E Tests', () => {
       },
     });
     testAppointmentId = appointment.id;
+    console.log('Created test appointment with ID:', testAppointmentId);
 
     // Criar tokens JWT para testes
     clientToken = jwtService.sign({
@@ -106,23 +125,25 @@ describe('Appointments E2E Tests', () => {
   }
 
   afterAll(async () => {
+    await cleanupDatabase(prisma);
     await prisma.$disconnect();
     await app.close();
   });
 
   describe('GET /appointments/available-slots', () => {
     it('should return available slots for a given date and service', async () => {
-      return request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .get(
           `/appointments/available-slots?date=2025-03-15&serviceId=${testServiceId}`,
         )
         .set('Authorization', `Bearer ${clientToken}`)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body).toHaveProperty('date', '2025-03-15');
-          expect(res.body).toHaveProperty('slots');
-          expect(Array.isArray(res.body.slots)).toBe(true);
-        });
+        .expect(200);
+
+      console.log('Available slots response:', res.body);
+
+      expect(res.body).toHaveProperty('date', '2025-03-15');
+      expect(res.body).toHaveProperty('slots');
+      expect(Array.isArray(res.body.slots)).toBe(true);
     });
 
     it('should require authentication', async () => {
@@ -136,26 +157,28 @@ describe('Appointments E2E Tests', () => {
 
   describe('POST /client/appointments', () => {
     it('should create a new appointment', async () => {
+      // Escolher data futura para evitar conflitos com outros testes
+      const appointmentDate = '2025-05-15';
+      const appointmentTime = '14:00';
+
       const res = await request(app.getHttpServer())
         .post('/client/appointments')
         .set('Authorization', `Bearer ${clientToken}`)
         .send({
-          appointmentDate: '2025-03-15',
-          appointmentTime: '14:00',
+          appointmentDate,
+          appointmentTime,
           notes: 'New test appointment',
           serviceId: testServiceId,
         })
         .expect(201);
 
-      // Manualmente formatar a data para verificar se está correto
-      const date = new Date(res.body.date);
-      const formatted = DateUtils.formatAppointmentDateTime(date);
+      console.log('Create appointment response:', res.body);
 
       expect(res.body).toHaveProperty('id');
       expect(res.body).toHaveProperty('status', AppointmentStatus.SCHEDULED);
       expect(res.body).toHaveProperty('notes', 'New test appointment');
-      expect(formatted.appointmentDate).toBe('2025-03-15');
-      // O horário pode variar por causa de timezone, então não verificamos exatamente
+      expect(res.body).toHaveProperty('appointmentDate', appointmentDate);
+      expect(res.body).toHaveProperty('appointmentTime', appointmentTime);
     });
 
     it('should require authentication', async () => {
@@ -182,12 +205,15 @@ describe('Appointments E2E Tests', () => {
 
   describe('PUT /client/appointments/:id/reschedule', () => {
     it('should reschedule an appointment', async () => {
+      const newDate = '2025-05-25';
+      const newTime = '16:00';
+
       return request(app.getHttpServer())
         .put(`/client/appointments/${testAppointmentId}/reschedule`)
         .set('Authorization', `Bearer ${clientToken}`)
         .send({
-          appointmentDate: '2025-03-25',
-          appointmentTime: '16:00',
+          appointmentDate: newDate,
+          appointmentTime: newTime,
         })
         .expect(200)
         .expect((res) => {
@@ -196,6 +222,8 @@ describe('Appointments E2E Tests', () => {
             'status',
             AppointmentStatus.RESCHEDULED,
           );
+          expect(res.body).toHaveProperty('appointmentDate', newDate);
+          expect(res.body).toHaveProperty('appointmentTime', newTime);
         });
     });
 
@@ -241,6 +269,8 @@ describe('Appointments E2E Tests', () => {
             expect(res.body[0]).toHaveProperty('id');
             expect(res.body[0]).toHaveProperty('date');
             expect(res.body[0]).toHaveProperty('status');
+            expect(res.body[0]).toHaveProperty('appointmentDate');
+            expect(res.body[0]).toHaveProperty('appointmentTime');
           }
         });
     });
@@ -252,35 +282,35 @@ describe('Appointments E2E Tests', () => {
     });
   });
 
-  // Testes adicionais para verificar regras de negócio
   describe('Business rules', () => {
-    it('should not allow booking at a time that already has an appointment', async () => {
-      // Primeiro, crie um agendamento
+    it('should handle conflicting appointments appropriately', async () => {
+      // Primeiro, criar um agendamento
+      const date = '2025-06-01';
+      const time = '10:00';
+
       await request(app.getHttpServer())
         .post('/client/appointments')
         .set('Authorization', `Bearer ${clientToken}`)
         .send({
-          appointmentDate: '2025-04-01',
-          appointmentTime: '10:00',
+          appointmentDate: date,
+          appointmentTime: time,
           notes: 'Test appointment',
           serviceId: testServiceId,
         })
         .expect(201);
 
-      // Agora tente agendar no mesmo horário
-      return request(app.getHttpServer())
+      // Agora tentar agendar no mesmo horário deve falhar com 409 ou 400
+      const response = await request(app.getHttpServer())
         .post('/client/appointments')
         .set('Authorization', `Bearer ${clientToken}`)
         .send({
-          appointmentDate: '2025-04-01',
-          appointmentTime: '10:00',
+          appointmentDate: date,
+          appointmentTime: time,
           notes: 'Conflicting appointment',
           serviceId: testServiceId,
-        })
-        .expect((response) => {
-          // Deve retornar 409 Conflict ou 400 Bad Request
-          expect([400, 409]).toContain(response.status);
         });
+
+      expect([400, 409]).toContain(response.status);
     });
   });
 });
