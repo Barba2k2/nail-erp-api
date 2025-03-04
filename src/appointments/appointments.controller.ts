@@ -8,12 +8,14 @@ import {
   ParseIntPipe,
   UseGuards,
   NotFoundException,
+  Query,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { DateUtils } from '../utils/date.utils';
-import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
-import { CreateAppointmentDto } from './appointments/dto/create-appointment.dto';
-import { RescheduleAppointmentDto } from './appointments/dto/reschedule-appointment.dto';
+import { JwtAuthGuard } from '../auth/jwt/jwt-auth.guard';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { AvailableSlotsDto } from './dto/available-slots.dto';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard)
@@ -88,5 +90,10 @@ export class AppointmentsController {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
     };
+  }
+
+  @Get('available-slots')
+  async getAvailableSlots(@Query() query: AvailableSlotsDto) {
+    return this.appointmentsService.getAvailableSlots(query);
   }
 }
