@@ -6,12 +6,14 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AvailableSlotsDto } from './dto/available-slots.dto';
 import { TimeSlot } from './interfaces/time-slot.interface';
 import { SettingsService } from '../settings/settings.service';
+import { NotificationSchedulerService } from 'src/notifications/notification-scheduler.service';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
+    private readonly notificationsScheduler: NotificationSchedulerService,
   ) {}
 
   async findAll() {
@@ -33,7 +35,7 @@ export class AppointmentsService {
       data.appointmentTime,
     );
 
-    return this.prisma.appointment.create({
+    const appointment = await this.prisma.appointment.create({
       data: {
         date: combinedDate,
         status: data.status || AppointmentStatus.SCHEDULED,
@@ -47,8 +49,15 @@ export class AppointmentsService {
       },
       include: {
         service: true,
+        user: true,
       },
     });
+
+    await this.notificationsScheduler.createAppointmentConfirmation(
+      appointment.id,
+    );
+
+    return appointment;
   }
 
   async findOne(id: number) {
@@ -67,22 +76,34 @@ export class AppointmentsService {
       data.appointmentTime,
     );
 
-    return this.prisma.appointment.update({
+    const appointment = await this.prisma.appointment.update({
       where: { id },
       data: {
         date: combinedDate,
         status: data.status || AppointmentStatus.RESCHEDULED,
       },
     });
+
+    await this.notificationsScheduler.createRescheduleNotification(
+      appointment.id,
+    );
+
+    return appointment;
   }
 
   async cancel(id: number) {
-    return this.prisma.appointment.update({
+    const appointment = await this.prisma.appointment.update({
       where: { id },
       data: {
         status: AppointmentStatus.CANCELED,
       },
     });
+
+    await this.notificationsScheduler.createCancellationNotification(
+      appointment.id,
+    );
+
+    return appointment;
   }
 
   async getAvailableSlots(query: AvailableSlotsDto) {
