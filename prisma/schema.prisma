@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,37 +10,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id                   Int       @id @default(autoincrement())
-  email                String    @unique
-  password             String
-  name                 String
-  role                 UserRole
-  passwordResetToken   String?   // para recuperação de senha
-  passwordResetExpires DateTime? // expiração do token
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-
-  appointments         Appointment[] @relation("UserAppointments")
-}
-
 enum UserRole {
   CLIENT
   PROFESSIONAL
-}
-
-model Appointment {
-  id         Int                @id @default(autoincrement())
-  date       DateTime
-  status     AppointmentStatus
-  notes      String?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-
-  userId     Int
-  user       User               @relation("UserAppointments", fields: [userId], references: [id])
-  serviceId  Int
-  service    Service            @relation(fields: [serviceId], references: [id])
 }
 
 enum AppointmentStatus {
@@ -54,50 +23,138 @@ enum AppointmentStatus {
   RESCHEDULED
 }
 
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  APPOINTMENT_CONFIRMATION
+  APPOINTMENT_CANCELLATION
+  APPOINTMENT_RESCHEDULED
+  CUSTOM_MESSAGE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  SYSTEM
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+model User {
+  id                   Int       @id @default(autoincrement())
+  email                String    @unique
+  password             String
+  name                 String
+  role                 UserRole
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  phone                String?
+  notes                String?
+  preferences          Json?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  appointments           Appointment[]           @relation("UserAppointments")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+}
+
+model Appointment {
+  id             Int               @id @default(autoincrement())
+  date           DateTime
+  status         AppointmentStatus
+  notes          String?
+  clientFeedback String?
+  rated          Boolean           @default(false)
+  rating         Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  userId    Int
+  user      User    @relation("UserAppointments", fields: [userId], references: [id])
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  notifications Notification[]
+}
+
 model Service {
-  id           Int           @id @default(autoincrement())
-  name         String
-  description  String?
-  duration     Int           // duração em minutos
-  price        Float
-  image        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  duration    Int
+  price       Float
+  image       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   appointments Appointment[]
 }
 
 model TimeBlock {
-  id          Int      @id @default(autoincrement())
-  date        DateTime
-  startTime   DateTime
-  endTime     DateTime
-  reason      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  startTime DateTime
+  endTime   DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model BusinessSettings {
-  id              Int       @id @default(autoincrement())
-  dayOfWeek       Int       // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
-  isOpen          Boolean   @default(true)
-  openTime        String    @default("08:00") // Formato HH:MM
-  closeTime       String    @default("18:00") // Formato HH:MM
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
+  id        Int      @id @default(autoincrement())
+  dayOfWeek Int
+  isOpen    Boolean  @default(true)
+  openTime  String   @default("08:00")
+  closeTime String   @default("18:00")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([dayOfWeek])
 }
 
 model SpecialBusinessDay {
-  id              Int       @id @default(autoincrement())
-  date            DateTime  // Data específica
-  isOpen          Boolean   @default(true)
-  openTime        String?   // Se diferente do normal
-  closeTime       String?   // Se diferente do normal
-  reason          String?   // Motivo para horário especial/fechamento
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  isOpen    Boolean  @default(true)
+  openTime  String?
+  closeTime String?
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([date])
+}
+
+model Notification {
+  id            Int                 @id @default(autoincrement())
+  userId        Int
+  user          User                @relation(fields: [userId], references: [id])
+  type          NotificationType
+  channel       NotificationChannel
+  status        NotificationStatus  @default(PENDING)
+  title         String
+  content       String
+  scheduledFor  DateTime?
+  sentAt        DateTime?
+  appointmentId Int?
+  appointment   Appointment?        @relation(fields: [appointmentId], references: [id])
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model NotificationPreference {
+  id                       Int      @id @default(autoincrement())
+  userId                   Int      @unique
+  user                     User     @relation(fields: [userId], references: [id])
+  enableEmailNotifications Boolean  @default(true)
+  enableSmsNotifications   Boolean  @default(false)
+  appointmentReminders     Boolean  @default(true)
+  reminderTime             Int      @default(24)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
