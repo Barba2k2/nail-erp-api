@@ -16,5 +16,6 @@ import { ClientHistoryService } from './history/client-history.service';
     AdminClientHistoryController,
   ],
   providers: [ClientsService, ClientHistoryService],
+  exports: [ClientsService, ClientHistoryService],
 })
 export class ClientsModule {}
