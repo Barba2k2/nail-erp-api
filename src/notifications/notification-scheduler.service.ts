@@ -13,6 +13,9 @@ import { DateUtils } from '../utils/date.utils';
 
 @Injectable()
 export class NotificationSchedulerService {
+  createStatusChangeNotification(appointmentId: number, status: string) {
+    throw new Error('Method not implemented.');
+  }
   private readonly logger = new Logger(NotificationSchedulerService.name);
 
   constructor(
