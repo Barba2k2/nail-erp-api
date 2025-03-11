@@ -118,17 +118,17 @@ export class ClientHistoryService {
     });
   }
 
-  async addAppointmentFeddback(
-    appointmentId: number,
-    feedback: string,
-    rating?: number,
-  ) {
-    return this.prisma.appointment.update({
-      where: { id: appointmentId },
-      data: {
-        clientFeedback: feedback,
-        ...(rating && { rating, rated: true }),
-      },
-    });
-  }
+  // async addAppointmentFeddback(
+  //   appointmentId: number,
+  //   feedback: string,
+  //   rating?: number,
+  // ) {
+  //   return this.prisma.appointment.update({
+  //     where: { id: appointmentId },
+  //     data: {
+  //       clientFeedback: feedback,
+  //       ...(rating && { rating, rated: true }),
+  //     },
+  //   });
+  // }
 }

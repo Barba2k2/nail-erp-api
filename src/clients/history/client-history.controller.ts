@@ -13,41 +13,38 @@ import { ClientHistoryService } from './client-history.service';
 import { Roles } from 'src/auth/decorator/roles.decorator';
 import { RolesGuard } from 'src/auth/decorator/roles.guard';
 
-@Controller('clients/history')
-@UseGuards(JwtAuthGuard)
+@Controller('client/history')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('CLIENT')
 export class ClientHistoryController {
   constructor(private readonly clientHistoryService: ClientHistoryService) {}
 
   @Get()
-  @Roles('CLIENT')
   async getClientHistory(@Req() req) {
     return this.clientHistoryService.getClientHistory(req.user.id);
   }
 
-  @Get('profile')
-  @Roles('CLIENT')
-  async getMyProfile(@Req() req) {
-    return this.clientHistoryService.getClientProfile(req.user.id);
-  }
+  // @Get('profile')
+  // async getMyProfile(@Req() req) {
+  //   return this.clientHistoryService.getClientProfile(req.user.id);
+  // }
 
   @Put('preferences')
-  @Roles('CLIENT')
   async updateClientPreferences(@Req() req, @Body() data: any) {
     return this.clientHistoryService.updateClientPreferences(req.user.id, data);
   }
 
-  @Post('appointments/:id/feedback')
-  @Roles('CLIENT')
-  async addFeedback(
-    @Param('id') id: string,
-    @Body() data: { feedback: string; rating?: number },
-  ) {
-    return this.clientHistoryService.addAppointmentFeddback(
-      +id,
-      data.feedback,
-      data.rating,
-    );
-  }
+  // @Post('appointments/:id/feedback')
+  // async addFeedback(
+  //   @Param('id') id: string,
+  //   @Body() data: { feedback: string; rating?: number },
+  // ) {
+  //   return this.clientHistoryService.addAppointmentFeddback(
+  //     +id,
+  //     data.feedback,
+  //     data.rating,
+  //   );
+  // }
 }
 
 @Controller('admin/clients')
@@ -75,10 +72,7 @@ export class AdminClientHistoryController {
   }
 
   @Put(':id/preferences')
-  async updateClientPreferences(
-    @Param('id') id: string,
-    @Body() data: any,
-  ) {
+  async updateClientPreferences(@Param('id') id: string, @Body() data: any) {
     return this.clientHistoryService.updateClientPreferences(+id, data);
   }
 }
