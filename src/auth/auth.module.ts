@@ -6,12 +6,14 @@ import { AuthController } from './auth.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { JwtStrategy } from './jwt/jwt.strategy';
 import { UsersModule } from 'src/users/users.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
     UsersModule,
+    NotificationsModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '30d' },
