@@ -253,6 +253,20 @@ export class AppointmentsService {
     };
   }
 
+  async addAppointmentFeddback(
+    appointmentId: number,
+    feedback: string,
+    rating?: number,
+  ) {
+    return this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        clientFeedback: feedback,
+        ...(rating && { rating, rated: true }),
+      },
+    });
+  }
+
   private combineDateAndTime(dateStr: string, timeStr: string): Date {
     try {
       const [year, month, day] = dateStr.split('-').map(Number);
