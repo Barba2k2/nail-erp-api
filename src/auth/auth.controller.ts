@@ -1,5 +1,17 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Query,
+  Get,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { RecoverPasswordDto } from './dto/recover-password.dto';
+import { UserRole } from '@prisma/client';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -27,14 +39,26 @@ export class AuthController {
     return this.authService.loginClient(body);
   }
 
-  @Post('recover-password')
-  async recoverPassword(@Body('email') email: string) {
-    return this.authService.recoverPassword(email);
+  @Post('recover-password/client')
+  async recoverClientPassword(@Body() data: RecoverPasswordDto) {
+    data.userType = UserRole.CLIENT;
+    return this.authService.recoverPassword(data);
+  }
+
+  @Post('recover-password/professional')
+  async recoverProfessionalPassword(@Body() data: RecoverPasswordDto) {
+    data.userType = UserRole.PROFESSIONAL;
+    return this.authService.recoverPassword(data);
+  }
+
+  @Get('verify-reset-token')
+  async verifyResetToken(@Query() query: VerifyTokenDto) {
+    return this.authService.verifyResetToken(query);
   }
 
   @Post('reset-password')
-  async resetPassword(@Body() body: any) {
-    const { token, newPassword } = body;
-    return this.authService.resetPassword(token, newPassword);
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() data: ResetPasswordDto) {
+    return this.authService.resetPassword(data);
   }
 }
