@@ -90,4 +90,16 @@ export class AppointmentsController {
   async getAvailableSlots(@Query() query: AvailableSlotsDto) {
     return this.appointmentsService.getAvailableSlots(query);
   }
+
+  @Post(':id/feedback')
+  async addFeedback(
+    @Param('id') id: string,
+    @Body() data: { feedback: string; rating?: number },
+  ) {
+    return this.appointmentsService.addAppointmentFeddback(
+      +id,
+      data.feedback,
+      data.rating,
+    );
+  }
 }
