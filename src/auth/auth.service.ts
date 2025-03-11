@@ -9,12 +9,19 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
+import { RecoverPasswordDto } from './dto/recover-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
+import { NotificationTemplatesService } from 'src/notifications/template/notification-templates.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
+    private readonly notificationsService: NotificationsService,
+    private readonly templateService?: NotificationTemplatesService,
   ) {}
 
   async register(data: any) {
@@ -79,11 +86,26 @@ export class AuthService {
     return { access_token: token };
   }
 
-  async recoverPassword(email: string) {
-    const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+  async recoverPassword(data: RecoverPasswordDto) {
+    // Busca por email com filtro opcional de tipo de usuário
+    const query: any = { email: data.email };
+
+    // Se um tipo de usuário específico for fornecido, adiciona ao filtro
+    if (data.userType) {
+      query.role = data.userType;
     }
+
+    const user = await this.usersService.findByEmail(data.email);
+
+    if (!user) {
+      // Não informamos ao usuário se o email não existe para evitar enumeração
+      return {
+        success: true,
+        message:
+          'Se o email existir em nossa base de dados, um link de recuperação será enviado.',
+      };
+    }
+
     // Gera token aleatório
     const token = randomBytes(20).toString('hex');
     const expiration = new Date();
@@ -94,25 +116,106 @@ export class AuthService {
       passwordResetExpires: expiration,
     });
 
-    // Aqui, integre com um serviço de email para enviar o token.
-    return { message: 'Email de recuperação enviado', token }; // token para demonstração
+    // Definir rota correta com base no tipo de usuário
+    const userTypeRoute = user.role === 'CLIENT' ? 'client' : 'admin';
+
+    try {
+      // Construir o link de recuperação com a rota específica para o tipo de usuário
+      const baseUrl =
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:3000';
+      const resetLink = `${baseUrl}/${userTypeRoute}/reset-password?token=${token}`;
+
+      // Criamos o conteúdo manualmente ao invés de usar o sistema de templates
+      // isso garante que funcione mesmo que o sistema de templates não esteja disponível
+      const subject = `Recuperação de Senha - ${this.configService.get<string>('BUSINESS_NAME') || 'Salão de Beleza'}`;
+      const content = `
+    Olá ${user.name},
+
+    Recebemos sua solicitação para redefinir sua senha.
+
+    Por favor, clique no link abaixo ou copie-o para seu navegador para criar uma nova senha:
+
+    ${resetLink}
+
+    Este link expira em 1 hora.
+
+    Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
+
+    Atenciosamente,
+    Equipe ${this.configService.get<string>('BUSINESS_NAME') || 'Salão de Beleza'}
+    `;
+
+      // Criar e enviar a notificação
+      const notification = await this.notificationsService.createNotification({
+        userId: user.id,
+        type: 'CUSTOM_MESSAGE',
+        channel: 'EMAIL',
+        title: subject,
+        content,
+        scheduledFor: new Date(), // Enviar imediatamente
+      });
+
+      // Processar a notificação imediatamente
+      await this.notificationsService.processNotification(notification.id);
+
+      return {
+        success: true,
+        message:
+          'Email de recuperação enviado. Por favor, verifique sua caixa de entrada.',
+      };
+    } catch (error) {
+      console.error('Erro ao enviar email de recuperação:', error);
+      // Retornar sucesso mesmo em caso de erro para não expor informações sensíveis
+      return {
+        success: true,
+        message:
+          'Se o email existir em nossa base de dados, um link de recuperação será enviado.',
+      };
+    }
   }
 
-  async resetPassword(token: string, newPassword: string) {
-    const user = await this.usersService.findByPasswordResetToken(token);
-    if (!user) {
-      throw new NotFoundException('Token inválido ou expirado');
+  async resetPassword(data: ResetPasswordDto) {
+    if (data.newPassword !== data.confirmPassword) {
+      throw new BadRequestException('As senhas não coincidem');
     }
-    // Verifica se passwordResetExpires está definido e se o token expirou
+
+    const user = await this.usersService.findByPasswordResetToken(data.token);
+    if (!user) {
+      throw new NotFoundException('Token de recuperação inválido ou expirado');
+    }
+
     if (!user.passwordResetExpires || new Date() > user.passwordResetExpires) {
       throw new BadRequestException('Token expirado');
     }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const hashedPassword = await bcrypt.hash(data.newPassword, 10);
     await this.usersService.updatePassword(user.id, {
       password: hashedPassword,
-      passwordResetToken: null,
       passwordResetExpires: null,
+      passwordResetToken: null,
     });
-    return { message: 'Senha atualizada com sucesso' };
+
+    return {
+      success: true,
+      message: 'Senha atualizada com sucesso',
+    };
+  }
+
+  async verifyResetToken(data: VerifyTokenDto) {
+    const user = await this.usersService.findByPasswordResetToken(data.token);
+    if (!user) {
+      throw new NotFoundException('Token de recuperação inválido ou expirado');
+    }
+
+    if (!user.passwordResetExpires || new Date() > user.passwordResetExpires) {
+      throw new BadRequestException('Token expirado');
+    }
+
+    return {
+      valid: true,
+      email: user.email,
+      userType: user.role,
+    };
   }
 }
