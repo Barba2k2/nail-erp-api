@@ -16,9 +16,11 @@ import { JwtAuthGuard } from '../auth/jwt/jwt-auth.guard';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AvailableSlotsDto } from './dto/available-slots.dto';
+import { RolesGuard } from '../auth/decorator/roles.guard';
+import { Roles } from '../auth/decorator/roles.decorator';
 
 @Controller('appointments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
 
@@ -30,6 +32,25 @@ export class AppointmentsController {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
     }));
+  }
+
+  @Get('available-slots')
+  async getAvailableSlots(@Query() query: AvailableSlotsDto) {
+    return this.appointmentsService.getAvailableSlots(query);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    const appointment = await this.appointmentsService.findOne(id);
+
+    if (!appointment) {
+      throw new NotFoundException(`Agendamento com ID ${id} não encontrado`);
+    }
+
+    return {
+      ...appointment,
+      ...DateUtils.formatAppointmentDateTime(appointment.date),
+    };
   }
 
   @Post()
@@ -49,18 +70,16 @@ export class AppointmentsController {
     };
   }
 
-  @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    const appointment = await this.appointmentsService.findOne(id);
-
-    if (!appointment) {
-      throw new NotFoundException(`Agendamento com ID ${id} não encontrado`);
-    }
-
-    return {
-      ...appointment,
-      ...DateUtils.formatAppointmentDateTime(appointment.date),
-    };
+  @Post(':id/feedback')
+  async addFeedback(
+    @Param('id') id: string,
+    @Body() data: { feedback: string; rating?: number },
+  ) {
+    return this.appointmentsService.addAppointmentFeedback(
+      +id,
+      data.feedback,
+      data.rating,
+    );
   }
 
   @Post(':id/reschedule')
@@ -84,22 +103,5 @@ export class AppointmentsController {
       ...appointment,
       ...DateUtils.formatAppointmentDateTime(appointment.date),
     };
-  }
-
-  @Get('available-slots')
-  async getAvailableSlots(@Query() query: AvailableSlotsDto) {
-    return this.appointmentsService.getAvailableSlots(query);
-  }
-
-  @Post(':id/feedback')
-  async addFeedback(
-    @Param('id') id: string,
-    @Body() data: { feedback: string; rating?: number },
-  ) {
-    return this.appointmentsService.addAppointmentFeddback(
-      +id,
-      data.feedback,
-      data.rating,
-    );
   }
 }
