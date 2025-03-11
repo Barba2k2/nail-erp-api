@@ -1,4 +1,3 @@
-// src/notifications/notification-scheduler.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Cron } from '@nestjs/schedule';
@@ -10,6 +9,7 @@ import {
   AppointmentStatus,
 } from '@prisma/client';
 import { DateUtils } from '../utils/date.utils';
+import { NotificationTemplatesService } from './template/notification-templates.service';
 
 @Injectable()
 export class NotificationSchedulerService {
@@ -21,9 +21,9 @@ export class NotificationSchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly templatesService: NotificationTemplatesService,
   ) {}
 
-  // Executa a cada 5 minutos para verificar e enviar notificações pendentes
   @Cron('*/5 * * * *')
   async processScheduledNotifications() {
     this.logger.debug('Processando notificações agendadas');
@@ -32,10 +32,10 @@ export class NotificationSchedulerService {
       where: {
         status: NotificationStatus.PENDING,
         scheduledFor: {
-          lte: new Date(), // Notificações agendadas para agora ou no passado
+          lte: new Date(),
         },
       },
-      take: 50, // Processa em lotes para evitar sobrecarga
+      take: 50,
     });
 
     this.logger.debug(
@@ -47,12 +47,10 @@ export class NotificationSchedulerService {
     }
   }
 
-  // Executa uma vez por dia à meia-noite para criar lembretes de agendamentos
   @Cron('0 0 * * *')
   async scheduleAppointmentReminders() {
     this.logger.debug('Agendando lembretes de compromissos');
 
-    // Busca todos os agendamentos dos próximos 2 dias que ainda não foram cancelados
     const now = new Date();
     const twoDaysFromNow = new Date(now);
     twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
@@ -64,7 +62,7 @@ export class NotificationSchedulerService {
           lte: twoDaysFromNow,
         },
         status: {
-          not: AppointmentStatus.CANCELED,
+          not: 'CANCELED',
         },
       },
       include: {
@@ -85,61 +83,55 @@ export class NotificationSchedulerService {
       try {
         const { user, service } = appointment;
 
-        // Verifica se o usuário tem preferências de notificação
         const preference =
           user.notificationPreference ||
           (await this.notificationsService.getNotificationPreference(user.id));
 
         if (!preference.appointmentReminders) {
-          continue; // Usuário desativou lembretes
+          continue;
         }
 
-        // Calcula o horário do lembrete baseado nas preferências do usuário
         const reminderTime = new Date(appointment.date);
         reminderTime.setHours(
           reminderTime.getHours() - preference.reminderTime,
         );
 
-        // Verifica se já existe um lembrete para este agendamento
         const existingReminder = await this.prisma.notification.findFirst({
           where: {
             appointmentId: appointment.id,
-            type: NotificationType.APPOINTMENT_REMINDER,
-            status: NotificationStatus.PENDING,
+            type: 'APPOINTMENT_REMINDER',
+            status: 'PENDING',
           },
         });
 
         if (existingReminder) {
-          continue; // Já existe um lembrete pendente
+          continue;
         }
 
-        // Formata data e hora para exibição
         const { appointmentDate, appointmentTime } =
           DateUtils.formatAppointmentDateTime(appointment.date);
 
-        // Cria conteúdo da notificação
-        const title = `Lembrete: Seu agendamento amanhã`;
+        const template = await this.templatesService.findDefault(
+          'APPOINTMENT_REMINDER',
+        );
 
-        const content = `Olá ${user.name},
+        const { subject, content } = this.templatesService.processTemplate(
+          template,
+          {
+            user,
+            service,
+            appointment: {
+              date: appointmentDate,
+              time: appointmentTime,
+            },
+          },
+        );
 
-Lembramos que você tem um agendamento para ${service.name} amanhã, ${appointmentDate} às ${appointmentTime}.
-
-Duração do serviço: ${service.duration} minutos
-Valor: R$ ${service.price.toFixed(2)}
-
-Por favor, confirme sua presença respondendo a este e-mail.
-
-Atenciosamente,
-Equipe do Salão de Beleza`;
-
-        // Cria a notificação
         await this.notificationsService.createNotification({
           userId: user.id,
-          type: NotificationType.APPOINTMENT_REMINDER,
-          channel: preference.enableEmailNotifications
-            ? NotificationChannel.EMAIL
-            : NotificationChannel.SYSTEM,
-          title,
+          type: 'APPOINTMENT_REMINDER',
+          channel: preference.enableEmailNotifications ? 'EMAIL' : 'SYSTEM',
+          title: subject,
           content,
           scheduledFor: reminderTime,
           appointmentId: appointment.id,
@@ -157,7 +149,6 @@ Equipe do Salão de Beleza`;
     }
   }
 
-  // Método para criar notificação de confirmação após agendamento
   async createAppointmentConfirmation(appointmentId: number) {
     try {
       const appointment = await this.prisma.appointment.findUnique({
@@ -176,35 +167,35 @@ Equipe do Salão de Beleza`;
       const { appointmentDate, appointmentTime } =
         DateUtils.formatAppointmentDateTime(appointment.date);
 
-      const title = `Agendamento Confirmado: ${service.name}`;
-      const content = `Olá ${user.name},
+      const template = await this.templatesService.findDefault(
+        'APPOINTMENT_CONFIRMATION',
+      );
 
-Seu agendamento foi confirmado com sucesso.
-
-Serviço: ${service.name}
-Data: ${appointmentDate}
-Horário: ${appointmentTime}
-Duração estimada: ${service.duration} minutos
-Valor: R$ ${service.price.toFixed(2)}
-
-Você receberá um lembrete um dia antes do seu agendamento.
-
-Atenciosamente,
-Equipe do Salão de Beleza`;
+      const { subject, content } = this.templatesService.processTemplate(
+        template,
+        {
+          user,
+          service,
+          appointment: {
+            date: appointmentDate,
+            time: appointmentTime,
+          },
+        },
+      );
 
       const preference =
         await this.notificationsService.getNotificationPreference(user.id);
 
       await this.notificationsService.createNotification({
         userId: user.id,
-        type: NotificationType.APPOINTMENT_CONFIRMATION,
+        type: 'APPOINTMENT_CONFIRMATION',
         channel: preference.enableEmailNotifications
           ? NotificationChannel.EMAIL
           : NotificationChannel.SYSTEM,
-        title,
+        title: subject,
         content,
         appointmentId: appointment.id,
-        scheduledFor: new Date(), // Enviar imediatamente
+        scheduledFor: new Date(),
       });
 
       return true;
@@ -217,7 +208,6 @@ Equipe do Salão de Beleza`;
     }
   }
 
-  // Método para criar notificação de cancelamento
   async createCancellationNotification(appointmentId: number) {
     try {
       const appointment = await this.prisma.appointment.findUnique({
@@ -236,33 +226,33 @@ Equipe do Salão de Beleza`;
       const { appointmentDate, appointmentTime } =
         DateUtils.formatAppointmentDateTime(appointment.date);
 
-      const title = `Agendamento Cancelado: ${service.name}`;
-      const content = `Olá ${user.name},
+      const template = await this.templatesService.findDefault(
+        'APPOINTMENT_CANCELLATION',
+      );
 
-Seu agendamento foi cancelado.
-
-Serviço: ${service.name}
-Data: ${appointmentDate}
-Horário: ${appointmentTime}
-
-Se você não solicitou este cancelamento, entre em contato conosco o mais breve possível.
-
-Atenciosamente,
-Equipe do Salão de Beleza`;
+      const { subject, content } = this.templatesService.processTemplate(
+        template,
+        {
+          user,
+          service,
+          appointment: {
+            date: appointmentDate,
+            time: appointmentTime,
+          },
+        },
+      );
 
       const preference =
         await this.notificationsService.getNotificationPreference(user.id);
 
       await this.notificationsService.createNotification({
         userId: user.id,
-        type: NotificationType.APPOINTMENT_CANCELLATION,
-        channel: preference.enableEmailNotifications
-          ? NotificationChannel.EMAIL
-          : NotificationChannel.SYSTEM,
-        title,
+        type: 'APPOINTMENT_CANCELLATION',
+        channel: preference.enableEmailNotifications ? 'EMAIL' : 'SYSTEM',
+        title: subject,
         content,
         appointmentId: appointment.id,
-        scheduledFor: new Date(), // Enviar imediatamente
+        scheduledFor: new Date(),
       });
 
       return true;
@@ -275,7 +265,6 @@ Equipe do Salão de Beleza`;
     }
   }
 
-  // Método para criar notificação de remarcação
   async createRescheduleNotification(appointmentId: number) {
     try {
       const appointment = await this.prisma.appointment.findUnique({
@@ -294,35 +283,33 @@ Equipe do Salão de Beleza`;
       const { appointmentDate, appointmentTime } =
         DateUtils.formatAppointmentDateTime(appointment.date);
 
-      const title = `Agendamento Remarcado: ${service.name}`;
-      const content = `Olá ${user.name},
+      const template = await this.templatesService.findDefault(
+        'APPOINTMENT_RESCHEDULED',
+      );
 
-Seu agendamento foi remarcado para uma nova data.
-
-Serviço: ${service.name}
-Nova Data: ${appointmentDate}
-Novo Horário: ${appointmentTime}
-Duração estimada: ${service.duration} minutos
-Valor: R$ ${service.price.toFixed(2)}
-
-Você receberá um lembrete um dia antes do seu agendamento.
-
-Atenciosamente,
-Equipe do Salão de Beleza`;
+      const { subject, content } = this.templatesService.processTemplate(
+        template,
+        {
+          user,
+          service,
+          appointment: {
+            date: appointmentDate,
+            time: appointmentTime,
+          },
+        },
+      );
 
       const preference =
         await this.notificationsService.getNotificationPreference(user.id);
 
       await this.notificationsService.createNotification({
         userId: user.id,
-        type: NotificationType.APPOINTMENT_RESCHEDULED,
-        channel: preference.enableEmailNotifications
-          ? NotificationChannel.EMAIL
-          : NotificationChannel.SYSTEM,
-        title,
+        type: 'APPOINTMENT_RESCHEDULED',
+        channel: preference.enableEmailNotifications ? 'EMAIL' : 'SYSTEM',
+        title: subject,
         content,
         appointmentId: appointment.id,
-        scheduledFor: new Date(), // Enviar imediatamente
+        scheduledFor: new Date(),
       });
 
       return true;
