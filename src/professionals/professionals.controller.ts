@@ -13,16 +13,20 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 import { RolesGuard } from 'src/auth/decorator/roles.guard';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { ProfessionalsService } from './professionals.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppointmentStatusChangedEvent } from 'src/appointments/events/appointment.events';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PROFESSIONAL')
 @Controller('admin')
 export class ProfessionalsController {
-  constructor(private readonly professionalsService: ProfessionalsService) {}
+  constructor(
+    private readonly professionalsService: ProfessionalsService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   @Get('profile')
   async getProfile(@Req() req) {
-    console.log('User from token:', req.user);
     return this.professionalsService.getProfile(req.user.id);
   }
 
@@ -38,10 +42,18 @@ export class ProfessionalsController {
 
   @Put('appointments/:id/status')
   async updateAppointmentStatus(@Param('id') id: string, @Body() data: any) {
-    return this.professionalsService.updateAppointmentStatus(
+    const appointment = await this.professionalsService.updateAppointmentStatus(
       Number(id),
       data.status,
     );
+
+    // Emitir evento de mudança de status
+    this.eventEmitter.emit(
+      'appointment.status.changed',
+      new AppointmentStatusChangedEvent(Number(id), data.status),
+    );
+
+    return appointment;
   }
 
   @Get('services')
