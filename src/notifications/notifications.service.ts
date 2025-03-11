@@ -1,4 +1,3 @@
-// src/notifications/notifications.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -8,7 +7,8 @@ import {
 } from '@prisma/client';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { ConfigService } from '@nestjs/config';
-
+import { MailgunService } from './providers/mailgun.service';
+import { TwilioService } from './providers/twilio.service';
 
 @Injectable()
 export class NotificationsService {
@@ -17,6 +17,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mailgunService: MailgunService,
+    private readonly twilioService: TwilioService,
   ) {}
 
   async createNotification(data: CreateNotificationDto) {
@@ -132,21 +134,28 @@ export class NotificationsService {
   }
 
   async sendEmail(to: string, subject: string, content: string) {
-    // Em um ambiente real, aqui integraria com um serviço de e-mail como SendGrid, Mailgun, etc.
-    this.logger.log(`[EMAIL SIMULADO] Para: ${to}, Assunto: ${subject}`);
-    this.logger.log(`Conteúdo: ${content}`);
+    const envirenment = this.configService.get<string>('NODE_ENV');
 
-    // Simula envio bem-sucedido para fins de MVP
-    return true;
+    if (envirenment === 'production') {
+      return this.mailgunService.sendEmail(to, subject, content);
+    } else {
+      this.logger.log(`[EMAIL SIMULADO] Para: ${to}`);
+      this.logger.log(`Assunto: ${subject}`);
+      this.logger.log(`Conteúdo: ${content}`);
+      return true;
+    }
   }
 
   async sendSMS(phoneNumber: string, message: string) {
-    // Em um ambiente real, aqui integraria com um serviço de SMS como Twilio, etc.
-    this.logger.log(`[SMS SIMULADO] Para: ${phoneNumber}`);
-    this.logger.log(`Mensagem: ${message}`);
+    const envirenment = this.configService.get<string>('NODE_ENV');
 
-    // Simula envio bem-sucedido para fins de MVP
-    return true;
+    if (envirenment === 'production') {
+      return this.twilioService.sendSMS(phoneNumber, message);
+    } else {
+      this.logger.log(`[SMS SIMULADO] Para: ${phoneNumber}`);
+      this.logger.log(`Mensagem: ${message}`);
+      return true;
+    }
   }
 
   async processNotification(notificationId: number) {
