@@ -253,7 +253,7 @@ export class AppointmentsService {
     };
   }
 
-  async addAppointmentFeddback(
+  async addAppointmentFeedback(
     appointmentId: number,
     feedback: string,
     rating?: number,
