@@ -47,7 +47,6 @@ export class NotificationsController {
   }
 }
 
-// Controlador administrativo para profissionais enviarem notificações
 @Controller('admin/notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PROFESSIONAL')
