@@ -171,3 +171,40 @@ model NotificationTemplate {
 
   @@unique([type, isDefault])
 }
+
+model BusinessInfo {
+  id                Int       @id @default(autoincrement())
+  
+  // Informações básicas
+  name              String    // Nome do negócio
+  slogan            String?   // Slogan ou tagline
+  description       String?   // Descrição do negócio
+  logo              String?   // URL do logo
+  
+  // Informações fiscais
+  cnpj              String?   // CNPJ
+  stateRegistration String?   // Inscrição Estadual
+  cityRegistration  String?   // Inscrição Municipal
+  
+  // Informações de contato
+  email             String    // Email principal
+  phone             String    // Telefone principal
+  whatsapp          String?   // WhatsApp
+  
+  // Endereço
+  address           String    // Rua e número
+  city              String    // Cidade
+  state             String    // Estado
+  zipCode           String    // CEP
+  neighborhood      String?   // Bairro
+  complement        String?   // Complemento
+  
+  // Redes sociais
+  instagram         String?   // Instagram
+  facebook          String?   // Facebook
+  tiktok            String?   // TikTok
+  youtube           String?   // YouTube
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
