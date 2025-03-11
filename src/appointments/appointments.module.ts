@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AppointmentsController, ClientAppointmentsController } from './appointments.controller';
+import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { SettingsModule } from 'src/settings/settings.module';
@@ -11,7 +11,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     SettingsModule,
     NotificationsModule,
   ],
-  controllers: [AppointmentsController, ClientAppointmentsController],
+  controllers: [AppointmentsController],
   providers: [AppointmentsService],
   exports: [AppointmentsService],
 })
