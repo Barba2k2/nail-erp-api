@@ -15,9 +15,9 @@ export enum MessageTemplateType {
 }
 
 export enum MessageTemplatePurpose {
-  MARKTING = 'MARKETING',
+  MARKETING = 'MARKETING',
   BIRTHDAY = 'BIRTHDAY',
-  LAYALTY = 'LOYALT',
+  LOYALTY = 'LOYALTY',
   ABANDONED_CART = 'ABANDONED_CART',
   WELCOME = 'WELCOME',
   PASSWORD_RECOVERY = 'PASSWORD_RECOVERY',
@@ -52,7 +52,7 @@ export class CreateMessageTemplateDto {
 
   @IsEnum(MessageTemplatePurpose, {
     message:
-      'Propósito invalido. Use MARKETING, BIRTHDAY, LAYALTY, ABANDONED_CART, WELCOME, PASSWORD_RECOVERY ou CUSTOM',
+      'Propósito invalido. Use MARKETING, BIRTHDAY, LOYALTY, ABANDONED_CART, WELCOME, PASSWORD_RECOVERY ou CUSTOM',
   })
   purpose: MessageTemplatePurpose;
 
