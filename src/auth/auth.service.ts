@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
@@ -14,13 +15,17 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyTokenDto } from './dto/verify-token.dto';
 import { NotificationTemplatesService } from 'src/notifications/template/notification-templates.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { BusinessInfoService } from 'src/settings/business-info/business-info.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
+    private readonly businessInfoService: BusinessInfoService,
     private readonly templateService?: NotificationTemplatesService,
   ) {}
 
@@ -87,17 +92,23 @@ export class AuthService {
   }
 
   async recoverPassword(data: RecoverPasswordDto) {
+    this.logger.log(`Iniciando recuperação de senha para: ${data.email}`);
+
     // Busca por email com filtro opcional de tipo de usuário
     const query: any = { email: data.email };
 
     // Se um tipo de usuário específico for fornecido, adiciona ao filtro
     if (data.userType) {
+      this.logger.log(`Tipo de usuário especificado: ${data.userType}`);
       query.role = data.userType;
     }
 
+    // Buscar usuário
+    this.logger.log(`Buscando usuário com email: ${data.email}`);
     const user = await this.usersService.findByEmail(data.email);
 
     if (!user) {
+      this.logger.log(`Usuário não encontrado para email: ${data.email}`);
       // Não informamos ao usuário se o email não existe para evitar enumeração
       return {
         success: true,
@@ -106,11 +117,20 @@ export class AuthService {
       };
     }
 
+    this.logger.log(`Usuário encontrado: ${user.id} (${user.name})`);
+
     // Gera token aleatório
     const token = randomBytes(20).toString('hex');
+    this.logger.log(`Token gerado: ${token}`);
+
     const expiration = new Date();
     expiration.setHours(expiration.getHours() + 1); // válido por 1 hora
+    this.logger.log(`Expiração definida para: ${expiration.toISOString()}`);
 
+    // Atualiza o token no banco
+    this.logger.log(
+      `Atualizando token de recuperação para usuário: ${user.id}`,
+    );
     await this.usersService.updatePasswordReset(user.id, {
       passwordResetToken: token,
       passwordResetExpires: expiration,
@@ -118,17 +138,25 @@ export class AuthService {
 
     // Definir rota correta com base no tipo de usuário
     const userTypeRoute = user.role === 'CLIENT' ? 'client' : 'admin';
+    this.logger.log(
+      `Rota definida para tipo de usuário ${user.role}: ${userTypeRoute}`,
+    );
 
     try {
-      // Construir o link de recuperação com a rota específica para o tipo de usuário
+      // Obter informações do negócio
+      this.logger.log('Buscando informações do negócio');
+      const businessInfo = await this.businessInfoService.getBusinessInfo();
+      this.logger.log(`Informações do negócio obtidas: ${businessInfo.name}`);
+
+      // Construir o link de recuperação
       const baseUrl =
         this.configService.get<string>('FRONTEND_URL') ||
         'http://localhost:3000';
       const resetLink = `${baseUrl}/${userTypeRoute}/reset-password?token=${token}`;
+      this.logger.log(`Link de recuperação: ${resetLink}`);
 
-      // Criamos o conteúdo manualmente ao invés de usar o sistema de templates
-      // isso garante que funcione mesmo que o sistema de templates não esteja disponível
-      const subject = `Recuperação de Senha - ${this.configService.get<string>('BUSINESS_NAME') || 'Salão de Beleza'}`;
+      // Criar conteúdo do email
+      const subject = `Recuperação de Senha - ${businessInfo.name}`;
       const content = `
     Olá ${user.name},
 
@@ -143,21 +171,30 @@ export class AuthService {
     Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
 
     Atenciosamente,
-    Equipe ${this.configService.get<string>('BUSINESS_NAME') || 'Salão de Beleza'}
+    Equipe ${businessInfo.name}
     `;
 
-      // Criar e enviar a notificação
+      // Criar notificação
+      this.logger.log(`Criando notificação para usuário: ${user.id}`);
       const notification = await this.notificationsService.createNotification({
         userId: user.id,
         type: 'CUSTOM_MESSAGE',
         channel: 'EMAIL',
         title: subject,
         content,
-        scheduledFor: new Date(), // Enviar imediatamente
+        scheduledFor: new Date(),
       });
 
-      // Processar a notificação imediatamente
-      await this.notificationsService.processNotification(notification.id);
+      this.logger.log(`Notificação criada com ID: ${notification.id}`);
+
+      // Processar a notificação
+      this.logger.log(`Processando notificação: ${notification.id}`);
+      const emailResult = await this.notificationsService.processNotification(
+        notification.id,
+      );
+      this.logger.log(
+        `Resultado do processamento: ${emailResult ? 'Sucesso' : 'Falha'}`,
+      );
 
       return {
         success: true,
@@ -165,7 +202,10 @@ export class AuthService {
           'Email de recuperação enviado. Por favor, verifique sua caixa de entrada.',
       };
     } catch (error) {
-      console.error('Erro ao enviar email de recuperação:', error);
+      this.logger.error(
+        `Erro ao enviar email de recuperação: ${error.message}`,
+        error.stack,
+      );
       // Retornar sucesso mesmo em caso de erro para não expor informações sensíveis
       return {
         success: true,
