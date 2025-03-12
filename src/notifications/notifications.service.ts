@@ -134,14 +134,39 @@ export class NotificationsService {
   }
 
   async sendEmail(to: string, subject: string, content: string) {
-    const envirenment = this.configService.get<string>('NODE_ENV');
+    this.logger.log(`NotificationsService.sendEmail chamado para ${to}`);
 
-    if (envirenment === 'production') {
-      return this.mailgunService.sendEmail(to, subject, content);
+    // Verificar se estamos em ambiente de produção
+    const environment = this.configService.get<string>('NODE_ENV');
+    this.logger.log(`Ambiente atual: ${environment || 'não definido'}`);
+
+    if (environment === 'production') {
+      this.logger.log(
+        'Ambiente de produção detectado, tentando enviar email real',
+      );
+      try {
+        const result = await this.mailgunService.sendEmail(
+          to,
+          subject,
+          content,
+        );
+        if (result) {
+          this.logger.log(`Email enviado com sucesso para ${to}`);
+        } else {
+          this.logger.error(`Falha ao enviar email para ${to}`);
+        }
+        return result;
+      } catch (error) {
+        this.logger.error(
+          `Exceção ao enviar email: ${error.message}`,
+          error.stack,
+        );
+        return false;
+      }
     } else {
-      this.logger.log(`[EMAIL SIMULADO] Para: ${to}`);
-      this.logger.log(`Assunto: ${subject}`);
-      this.logger.log(`Conteúdo: ${content}`);
+      // Em desenvolvimento, apenas simula o envio
+      this.logger.log(`[EMAIL SIMULADO] Para: ${to}, Assunto: ${subject}`);
+      this.logger.log(`Conteúdo: ${content.substring(0, 150)}...`);
       return true;
     }
   }
@@ -159,6 +184,7 @@ export class NotificationsService {
   }
 
   async processNotification(notificationId: number) {
+    this.logger.log(`Processando notificação #${notificationId}`);
     try {
       const notification = await this.prisma.notification.findUnique({
         where: { id: notificationId },
@@ -183,10 +209,14 @@ export class NotificationsService {
         return;
       }
 
+      this.logger.log(
+        `Enviando notificação tipo: ${notification.type}, canal: ${notification.channel}`,
+      );
       let success = false;
 
       switch (notification.channel) {
         case NotificationChannel.EMAIL:
+          this.logger.log(`Enviando email para ${notification.user.email}`);
           success = await this.sendEmail(
             notification.user.email,
             notification.title,
@@ -200,6 +230,7 @@ export class NotificationsService {
               `Usuário #${notification.userId} não possui telefone cadastrado`,
             );
           }
+          this.logger.log(`Enviando SMS para ${notification.user.phone}`);
           success = await this.sendSMS(
             notification.user.phone,
             notification.content,
@@ -208,6 +239,9 @@ export class NotificationsService {
 
         case NotificationChannel.SYSTEM:
           // Apenas marca como enviado, será exibido na interface do usuário
+          this.logger.log(
+            `Notificação do sistema para usuário #${notification.userId}`,
+          );
           success = true;
           break;
 
