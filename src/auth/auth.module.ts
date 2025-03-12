@@ -7,6 +7,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { JwtStrategy } from './jwt/jwt.strategy';
 import { UsersModule } from 'src/users/users.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { SettingsModule } from 'src/settings/settings.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     PassportModule,
     UsersModule,
     NotificationsModule,
+    SettingsModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '30d' },
