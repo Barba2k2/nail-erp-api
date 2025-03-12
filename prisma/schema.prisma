@@ -28,6 +28,7 @@ enum NotificationType {
   APPOINTMENT_CONFIRMATION
   APPOINTMENT_CANCELLATION
   APPOINTMENT_RESCHEDULED
+  PASSWORD_RECOVERY
   CUSTOM_MESSAGE
 }
 
@@ -173,38 +174,83 @@ model NotificationTemplate {
 }
 
 model BusinessInfo {
-  id                Int       @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // Informações básicas
-  name              String    // Nome do negócio
-  slogan            String?   // Slogan ou tagline
-  description       String?   // Descrição do negócio
-  logo              String?   // URL do logo
-  
+  name        String // Nome do negócio
+  slogan      String? // Slogan ou tagline
+  description String? // Descrição do negócio
+  logo        String? // URL do logo
+
   // Informações fiscais
-  cnpj              String?   // CNPJ
-  stateRegistration String?   // Inscrição Estadual
-  cityRegistration  String?   // Inscrição Municipal
-  
+  cnpj              String? // CNPJ
+  stateRegistration String? // Inscrição Estadual
+  cityRegistration  String? // Inscrição Municipal
+
   // Informações de contato
-  email             String    // Email principal
-  phone             String    // Telefone principal
-  whatsapp          String?   // WhatsApp
-  
+  email    String // Email principal
+  phone    String // Telefone principal
+  whatsapp String? // WhatsApp
+
   // Endereço
-  address           String    // Rua e número
-  city              String    // Cidade
-  state             String    // Estado
-  zipCode           String    // CEP
-  neighborhood      String?   // Bairro
-  complement        String?   // Complemento
-  
+  address      String // Rua e número
+  city         String // Cidade
+  state        String // Estado
+  zipCode      String // CEP
+  neighborhood String? // Bairro
+  complement   String? // Complemento
+
   // Redes sociais
-  instagram         String?   // Instagram
-  facebook          String?   // Facebook
-  tiktok            String?   // TikTok
-  youtube           String?   // YouTube
-  
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  instagram String? // Instagram
+  facebook  String? // Facebook
+  tiktok    String? // TikTok
+  youtube   String? // YouTube
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Tenant    Tenant?
+}
+
+enum MessageTemplateType {
+  EMAIL
+  WHATSAPP
+  BOTH
+}
+
+enum MessageTemplatePurpose {
+  MARKETING
+  BIRTHDAY
+  LOYALTY
+  ABANDONED_CART
+  WELCOME
+  PASSWORD_RECOVERY
+  CUSTOM
+}
+
+model MessageTemplate {
+  id          Int                    @id @default(autoincrement())
+  name        String
+  subject     String
+  content     String
+  type        MessageTemplateType
+  purpose     MessageTemplatePurpose
+  description String?
+  isDefault   Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  tenant      Tenant?                @relation(fields: [tenantId], references: [id])
+  tenantId    Int?
+
+  @@unique([purpose, isDefault])
+}
+
+model Tenant {
+  id              Int               @id @default(autoincrement())
+  subdomain       String            @unique
+  businessId      Int               @unique
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  business        BusinessInfo      @relation(fields: [businessId], references: [id])
+  MessageTemplate MessageTemplate[]
 }
