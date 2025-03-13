@@ -147,7 +147,7 @@ export class TenantService {
       .replace(/-{2,}/g, '-');
   }
 
-  async getSubdomainAvaliability(subdomain: string) {
+  async checkSubdomainAvailability(subdomain: string) {
     const normalizedSubdomain = this.normalizeSubdomain(subdomain);
 
     const existingTenant = await this.prisma.tenant.findUnique({
