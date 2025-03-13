@@ -23,6 +23,38 @@ export class NotificationTemplatesService {
     });
   }
 
+  async findTemplateByPurpose(purpose: string) {
+    let type: NotificationType;
+
+    switch (purpose.toUpperCase()) {
+      case 'PASSWORD_RECOVERY':
+        type = NotificationType.PASSWORD_RECOVERY;
+        break;
+      case 'APPOINTMENT_REMINDER':
+        type = NotificationType.APPOINTMENT_REMINDER;
+        break;
+      case 'APPOINTMENT_CONFIRMATION':
+        type = NotificationType.APPOINTMENT_CONFIRMATION;
+        break;
+      case 'APPOINTMENT_CANCELLATION':
+        type = NotificationType.APPOINTMENT_CANCELLATION;
+        break;
+      case 'APPOINTMENT_RESCHEDULED':
+        type = NotificationType.APPOINTMENT_RESCHEDULED;
+        break;
+      case 'CUSTOM':
+      case 'CUSTOM_MESSAGE':
+        type = NotificationType.CUSTOM_MESSAGE;
+        break;
+      default:
+        throw new NotFoundException(
+          `Template com propósito ${purpose} não encontrado`,
+        );
+    }
+
+    return this.findDefault(type);
+  }
+
   async findDefault(type: NotificationType) {
     const template = await this.prisma.notificationTemplate.findFirst({
       where: {
