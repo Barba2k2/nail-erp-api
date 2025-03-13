@@ -4,11 +4,17 @@ import {
   NotificationChannel,
   NotificationStatus,
   NotificationType,
+  Notification,
+  User,
 } from '@prisma/client';
-import { CreateNotificationDto } from './dto/create-notification.dto';
 import { ConfigService } from '@nestjs/config';
-import { MailgunService } from './providers/mailgun.service';
-import { TwilioService } from './providers/twilio.service';
+import { NotificationChannelFactory } from './factory/notification-channel.factory';
+import { CreateNotificationDto } from './dto/create-notification.dto';
+
+// Define a type that includes the user relation
+type NotificationWithUser = Notification & {
+  user?: User | null;
+};
 
 @Injectable()
 export class NotificationsService {
@@ -17,11 +23,10 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    private readonly mailgunService: MailgunService,
-    private readonly twilioService: TwilioService,
+    private readonly channelFactory: NotificationChannelFactory,
   ) {}
 
-  async createNotification(data: CreateNotificationDto) {
+  async createNotification(data: CreateNotificationDto): Promise<Notification> {
     try {
       const notification = await this.prisma.notification.create({
         data: {
@@ -67,12 +72,163 @@ export class NotificationsService {
     });
   }
 
-  async markAsSent(id: number) {
+  async processNotification(notificationId: number): Promise<boolean> {
+    this.logger.log(`Processando notificação #${notificationId}`);
+
+    try {
+      const notification = await this.prisma.notification.findUnique({
+        where: { id: notificationId },
+        include: {
+          user: true,
+          appointment: {
+            include: {
+              service: true,
+            },
+          },
+        },
+      });
+
+      if (!notification) {
+        throw new Error(`Notificação #${notificationId} não encontrada`);
+      }
+
+      if (notification.status !== NotificationStatus.PENDING) {
+        this.logger.log(
+          `Notificação #${notificationId} já processada (status: ${notification.status})`,
+        );
+        return notification.status === NotificationStatus.SENT;
+      }
+
+      // Implementa processamento com fallback entre canais
+      return await this.sendWithFallback(notification as NotificationWithUser);
+    } catch (error) {
+      this.logger.error(
+        `Erro ao processar notificação #${notificationId}: ${error.message}`,
+        error.stack,
+      );
+
+      await this.markAsFailed(notificationId);
+      return false;
+    }
+  }
+
+  private async sendWithFallback(notification: NotificationWithUser): Promise<boolean> {
+    if (!notification.user) {
+      // Buscar o usuário se não estiver incluído na notificação
+      const user = await this.prisma.user.findUnique({
+        where: { id: notification.userId },
+      });
+      
+      if (!user) {
+        throw new Error(
+          `Usuário para notificação #${notification.id} não encontrado`,
+        );
+      }
+      
+      // Usar o usuário encontrado
+      notification.user = user;
+    }
+
+    // Obter as estratégias em ordem de prioridade
+    const strategies = this.channelFactory.getStrategiesInPriorityOrder();
+
+    // Reordenar para priorizar o canal da notificação
+    const primaryStrategy = this.channelFactory.getStrategy(
+      notification.channel,
+    );
+    const orderedStrategies = [
+      primaryStrategy,
+      ...strategies.filter((s) => s.getChannel() !== notification.channel),
+    ];
+
+    // Tentar cada canal sequencialmente
+    for (const strategy of orderedStrategies) {
+      let destination: string;
+
+      // Obter destino apropriado para o canal
+      if (strategy.getChannel() === NotificationChannel.EMAIL) {
+        destination = notification.user.email || '';
+      } else if (
+        strategy.getChannel() === NotificationChannel.SMS ||
+        strategy.getChannel() === NotificationChannel.WHATSAPP
+      ) {
+        destination = notification.user.phone || '';
+      } else {
+        continue; // Pular canais não suportados
+      }
+
+      // Validar destino
+      if (!destination || !strategy.validateDestination(destination)) {
+        this.logger.warn(
+          `Destino inválido para ${strategy.getChannel()}: ${destination}`,
+        );
+        continue;
+      }
+
+      // Tentar enviar com retry
+      const success = await this.sendWithRetry(
+        strategy,
+        destination,
+        notification.title,
+        notification.content,
+      );
+
+      if (success) {
+        // Atualizar status e canal utilizado
+        await this.markAsSent(notification.id, strategy.getChannel());
+        return true;
+      }
+    }
+
+    // Se todos os canais falharem
+    await this.markAsFailed(notification.id);
+    return false;
+  }
+
+  private async sendWithRetry(
+    strategy: any,
+    destination: string,
+    subject: string,
+    content: string,
+    maxRetries = 3,
+  ): Promise<boolean> {
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+      attempt++;
+
+      try {
+        const success = await strategy.send(destination, subject, content);
+
+        if (success) {
+          return true;
+        }
+
+        // Aguardar antes da próxima tentativa (backoff exponencial)
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } catch (error) {
+        this.logger.error(
+          `Erro ao enviar via ${strategy.getChannel()} (tentativa ${attempt}): ${error.message}`,
+        );
+
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    return false;
+  }
+
+  async markAsSent(id: number, channel?: NotificationChannel) {
     return this.prisma.notification.update({
       where: { id },
       data: {
         status: NotificationStatus.SENT,
         sentAt: new Date(),
+        ...(channel && { channel }),
       },
     });
   }
@@ -99,18 +255,24 @@ export class NotificationsService {
 
     if (!preference) {
       // Criar preferências padrão se não existirem
-      return this.prisma.notificationPreference.create({
-        data: {
-          userId,
-          enableEmailNotifications: true,
-          enableSmsNotifications: false,
-          appointmentReminders: true,
-          reminderTime: 24, // 24 horas antes
-        },
+      return this.createNotificationPreference(userId, {
+        enableEmailNotifications: true,
+        enableSmsNotifications: false,
+        appointmentReminders: true,
+        reminderTime: 24,
       });
     }
 
     return preference;
+  }
+
+  async createNotificationPreference(userId: number, data: any) {
+    return this.prisma.notificationPreference.create({
+      data: {
+        userId,
+        ...data,
+      },
+    });
   }
 
   async updateNotificationPreference(userId: number, data: any) {
@@ -131,142 +293,5 @@ export class NotificationsService {
         ...data,
       },
     });
-  }
-
-  async sendEmail(to: string, subject: string, content: string) {
-    this.logger.log(`NotificationsService.sendEmail chamado para ${to}`);
-
-    // Verificar se estamos em ambiente de produção
-    const environment = this.configService.get<string>('NODE_ENV');
-    this.logger.log(`Ambiente atual: ${environment || 'não definido'}`);
-
-    if (environment === 'production') {
-      this.logger.log(
-        'Ambiente de produção detectado, tentando enviar email real',
-      );
-      try {
-        const result = await this.mailgunService.sendEmail(
-          to,
-          subject,
-          content,
-        );
-        if (result) {
-          this.logger.log(`Email enviado com sucesso para ${to}`);
-        } else {
-          this.logger.error(`Falha ao enviar email para ${to}`);
-        }
-        return result;
-      } catch (error) {
-        this.logger.error(
-          `Exceção ao enviar email: ${error.message}`,
-          error.stack,
-        );
-        return false;
-      }
-    } else {
-      // Em desenvolvimento, apenas simula o envio
-      this.logger.log(`[EMAIL SIMULADO] Para: ${to}, Assunto: ${subject}`);
-      this.logger.log(`Conteúdo: ${content.substring(0, 150)}...`);
-      return true;
-    }
-  }
-
-  async sendSMS(phoneNumber: string, message: string) {
-    const envirenment = this.configService.get<string>('NODE_ENV');
-
-    if (envirenment === 'production') {
-      return this.twilioService.sendSMS(phoneNumber, message);
-    } else {
-      this.logger.log(`[SMS SIMULADO] Para: ${phoneNumber}`);
-      this.logger.log(`Mensagem: ${message}`);
-      return true;
-    }
-  }
-
-  async processNotification(notificationId: number) {
-    this.logger.log(`Processando notificação #${notificationId}`);
-    try {
-      const notification = await this.prisma.notification.findUnique({
-        where: { id: notificationId },
-        include: {
-          user: true,
-          appointment: {
-            include: {
-              service: true,
-            },
-          },
-        },
-      });
-
-      if (!notification) {
-        throw new Error(`Notificação #${notificationId} não encontrada`);
-      }
-
-      if (notification.status !== NotificationStatus.PENDING) {
-        this.logger.log(
-          `Notificação #${notificationId} já processada (status: ${notification.status})`,
-        );
-        return;
-      }
-
-      this.logger.log(
-        `Enviando notificação tipo: ${notification.type}, canal: ${notification.channel}`,
-      );
-      let success = false;
-
-      switch (notification.channel) {
-        case NotificationChannel.EMAIL:
-          this.logger.log(`Enviando email para ${notification.user.email}`);
-          success = await this.sendEmail(
-            notification.user.email,
-            notification.title,
-            notification.content,
-          );
-          break;
-
-        case NotificationChannel.SMS:
-          if (!notification.user.phone) {
-            throw new Error(
-              `Usuário #${notification.userId} não possui telefone cadastrado`,
-            );
-          }
-          this.logger.log(`Enviando SMS para ${notification.user.phone}`);
-          success = await this.sendSMS(
-            notification.user.phone,
-            notification.content,
-          );
-          break;
-
-        case NotificationChannel.SYSTEM:
-          // Apenas marca como enviado, será exibido na interface do usuário
-          this.logger.log(
-            `Notificação do sistema para usuário #${notification.userId}`,
-          );
-          success = true;
-          break;
-
-        default:
-          throw new Error(
-            `Canal de notificação desconhecido: ${notification.channel}`,
-          );
-      }
-
-      if (success) {
-        await this.markAsSent(notification.id);
-        this.logger.log(`Notificação #${notification.id} enviada com sucesso`);
-      } else {
-        await this.markAsFailed(notification.id);
-        this.logger.error(`Falha ao enviar notificação #${notification.id}`);
-      }
-
-      return success;
-    } catch (error) {
-      this.logger.error(
-        `Erro ao processar notificação #${notificationId}: ${error.message}`,
-        error.stack,
-      );
-      await this.markAsFailed(notificationId);
-      return false;
-    }
   }
 }
