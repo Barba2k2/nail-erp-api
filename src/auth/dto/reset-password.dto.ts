@@ -13,7 +13,7 @@ export class ResetPasswordDto {
   token: string;
 
   @IsNotEmpty({ message: 'A nova senha é obrigatória' })
-  @MinLength(6, { message: 'A senha deve ter pelo menos 6 caracteres' })
+  @MinLength(8, { message: 'A senha deve ter pelo menos 8 caracteres' })
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
     message:
       'A senha deve conter pelo menos uma letra maiúscula, uma minúscula e um número',
