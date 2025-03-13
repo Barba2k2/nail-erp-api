@@ -155,30 +155,54 @@ export class AuthService {
       const resetLink = `${baseUrl}/${userTypeRoute}/reset-password?token=${token}`;
       this.logger.log(`Link de recuperação: ${resetLink}`);
 
-      // Criar conteúdo do email
-      const subject = `Recuperação de Senha - ${businessInfo.name}`;
-      const content = `
-    Olá ${user.name},
+      // Usar o serviço de templates para obter o modelo personalizado
+      let subject = `Recuperação de Senha - ${businessInfo.name}`;
+      let content = `
+      Olá ${user.name},
 
-    Recebemos sua solicitação para redefinir sua senha.
+      Recebemos sua solicitação para redefinir sua senha.
 
-    Por favor, clique no link abaixo ou copie-o para seu navegador para criar uma nova senha:
+      Por favor, clique no link abaixo ou copie-o para seu navegador para criar uma nova senha:
 
-    ${resetLink}
+      ${resetLink}
 
-    Este link expira em 1 hora.
+      Este link expira em 1 hora.
 
-    Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
+      Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
 
-    Atenciosamente,
-    Equipe ${businessInfo.name}
+      Atenciosamente,
+      Equipe ${businessInfo.name}
     `;
+
+      try {
+        // Tentar obter template personalizado de senha, se existir
+        if (this.templateService) {
+          const template = await this.templateService.findTemplateByPurpose('PASSWORD_RECOVERY');
+        
+          if (template) {
+            // Processar o template com os dados do usuário e negócio
+            const processedTemplate = this.templateService.processTemplate(template, {
+              client: user,
+              business: businessInfo,
+              resetLink: resetLink
+            });
+          
+            subject = processedTemplate.subject;
+            content = processedTemplate.content;
+          
+            this.logger.log('Template personalizado de recuperação de senha aplicado');
+          }
+        }
+      } catch (templateError) {
+        // Se houver erro ao obter o template, prosseguir com o conteúdo padrão
+        this.logger.error(`Erro ao obter template de recuperação de senha: ${templateError.message}`, templateError.stack);
+      }
 
       // Criar notificação
       this.logger.log(`Criando notificação para usuário: ${user.id}`);
       const notification = await this.notificationsService.createNotification({
         userId: user.id,
-        type: 'CUSTOM_MESSAGE',
+        type: 'PASSWORD_RECOVERY',
         channel: 'EMAIL',
         title: subject,
         content,
