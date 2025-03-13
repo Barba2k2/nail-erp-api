@@ -11,6 +11,8 @@ import { SettingsModule } from './settings/settings.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { MessagingModule } from './messaging/messaging.module';
+import { TenantModule } from './tenant/tenant.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     ServicesModule,
     SettingsModule,
     NotificationsModule,
+    MessagingModule,
+    TenantModule,
   ],
 })
 export class AppModule {}
