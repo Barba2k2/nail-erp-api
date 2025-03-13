@@ -16,6 +16,7 @@ import { VerifyTokenDto } from './dto/verify-token.dto';
 import { NotificationTemplatesService } from 'src/notifications/template/notification-templates.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { BusinessInfoService } from 'src/settings/business-info/business-info.service';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -30,81 +31,64 @@ export class AuthService {
   ) {}
 
   async register(data: any) {
+    const existingUser = await this.usersService.findByEmail(data.email);
+    if (existingUser) {
+      throw new BadRequestException('Usuário já existe');
+    }
+
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    return this.usersService.create({ ...data, password: hashedPassword });
+    const user = await this.usersService.create({
+      ...data,
+      password: hashedPassword,
+    });
+
+    await this.notificationsService.createNotificationPreference(user.id, {
+      enableEmailNotifications: true,
+      enableSmsNotifications: false,
+      appointmentReminders: true,
+      reminderTime: 24,
+    });
+
+    return user;
   }
 
-  async login(data: any) {
+  async login(data: any, requiredRole?: UserRole) {
     const user = await this.usersService.findByEmail(data.email);
     if (!user) {
       throw new UnauthorizedException('Usuário não encontrado');
     }
-    const passwordMatch = await bcrypt.compare(data.password, user.password);
-    if (!passwordMatch) {
+
+    if (requiredRole && user.role !== requiredRole) {
+      throw new UnauthorizedException('Credenciais inválidas');
+    }
+
+    const passwordValid = await bcrypt.compare(data.password, user.password);
+
+    if (!passwordValid) {
       throw new UnauthorizedException('Senha inválida');
     }
-    const payload = { sub: user.id, email: user.email, role: user.role };
 
+    const payload = { sub: user.id, email: user.email, role: user.role };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
+
     if (!jwtSecret) {
       throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
     }
-    const token = jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
-    return { access_token: token };
-  }
 
-  async loginProfessional(data: any) {
-    const user = await this.usersService.findByEmail(data.email);
-    if (!user || user.role !== 'PROFESSIONAL') {
-      throw new UnauthorizedException('Usuário profissional não encontrado');
-    }
-    const passwordMatch = await bcrypt.compare(data.password, user.password);
-    if (!passwordMatch) {
-      throw new UnauthorizedException('Senha inválida');
-    }
-    const payload = { sub: user.id, email: user.email, role: user.role };
-
-    const jwtSecret = this.configService.get<string>('JWT_SECRET');
-    if (!jwtSecret) {
-      throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
-    }
-    const token = jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
-    return { access_token: token };
-  }
-
-  async loginClient(data: any) {
-    const user = await this.usersService.findByEmail(data.email);
-    if (!user || user.role !== 'CLIENT') {
-      throw new UnauthorizedException('Usuário cliente não encontrado');
-    }
-    const passwordMatch = await bcrypt.compare(data.password, user.password);
-    if (!passwordMatch) {
-      throw new UnauthorizedException('Senha inválida');
-    }
-    const payload = { sub: user.id, email: user.email, role: user.role };
-
-    const jwtSecret = this.configService.get<string>('JWT_SECRET');
-    if (!jwtSecret) {
-      throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
-    }
     const token = jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
     return { access_token: token };
   }
 
   async recoverPassword(data: RecoverPasswordDto) {
-    this.logger.log(`Iniciando recuperação de senha para: ${data.email}`);
-
     // Busca por email com filtro opcional de tipo de usuário
     const query: any = { email: data.email };
 
     // Se um tipo de usuário específico for fornecido, adiciona ao filtro
     if (data.userType) {
-      this.logger.log(`Tipo de usuário especificado: ${data.userType}`);
       query.role = data.userType;
     }
 
     // Buscar usuário
-    this.logger.log(`Buscando usuário com email: ${data.email}`);
     const user = await this.usersService.findByEmail(data.email);
 
     if (!user) {
@@ -125,7 +109,6 @@ export class AuthService {
 
     const expiration = new Date();
     expiration.setHours(expiration.getHours() + 1); // válido por 1 hora
-    this.logger.log(`Expiração definida para: ${expiration.toISOString()}`);
 
     // Atualiza o token no banco
     this.logger.log(
@@ -144,9 +127,7 @@ export class AuthService {
 
     try {
       // Obter informações do negócio
-      this.logger.log('Buscando informações do negócio');
       const businessInfo = await this.businessInfoService.getBusinessInfo();
-      this.logger.log(`Informações do negócio obtidas: ${businessInfo.name}`);
 
       // Construir o link de recuperação
       const baseUrl =
@@ -158,48 +139,58 @@ export class AuthService {
       // Usar o serviço de templates para obter o modelo personalizado
       let subject = `Recuperação de Senha - ${businessInfo.name}`;
       let content = `
-      Olá ${user.name},
+        Olá ${user.name},
 
-      Recebemos sua solicitação para redefinir sua senha.
+        Recebemos sua solicitação para redefinir sua senha.
 
-      Por favor, clique no link abaixo ou copie-o para seu navegador para criar uma nova senha:
+        Por favor, clique no link abaixo ou copie-o para seu navegador para criar uma nova senha:
 
-      ${resetLink}
+        ${resetLink}
 
-      Este link expira em 1 hora.
+        Este link expira em 1 hora.
 
-      Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
+        Se você não solicitou esta redefinição de senha, ignore este e-mail e sua senha permanecerá a mesma.
 
-      Atenciosamente,
-      Equipe ${businessInfo.name}
-    `;
+        Atenciosamente,
+        Equipe ${businessInfo.name}
+      `;
 
       try {
         // Tentar obter template personalizado de senha, se existir
         if (this.templateService) {
-          const template = await this.templateService.findTemplateByPurpose('PASSWORD_RECOVERY');
-        
+          const template =
+            await this.templateService.findTemplateByPurpose(
+              'PASSWORD_RECOVERY',
+            );
+
           if (template) {
             // Processar o template com os dados do usuário e negócio
-            const processedTemplate = this.templateService.processTemplate(template, {
-              client: user,
-              business: businessInfo,
-              resetLink: resetLink
-            });
-          
+            const processedTemplate = this.templateService.processTemplate(
+              template,
+              {
+                client: user,
+                business: businessInfo,
+                resetLink: resetLink,
+              },
+            );
+
             subject = processedTemplate.subject;
             content = processedTemplate.content;
-          
-            this.logger.log('Template personalizado de recuperação de senha aplicado');
+
+            this.logger.log(
+              'Template personalizado de recuperação de senha aplicado',
+            );
           }
         }
       } catch (templateError) {
         // Se houver erro ao obter o template, prosseguir com o conteúdo padrão
-        this.logger.error(`Erro ao obter template de recuperação de senha: ${templateError.message}`, templateError.stack);
+        this.logger.error(
+          `Erro ao obter template de recuperação de senha: ${templateError.message}`,
+          templateError.stack,
+        );
       }
 
       // Criar notificação
-      this.logger.log(`Criando notificação para usuário: ${user.id}`);
       const notification = await this.notificationsService.createNotification({
         userId: user.id,
         type: 'PASSWORD_RECOVERY',
@@ -209,15 +200,9 @@ export class AuthService {
         scheduledFor: new Date(),
       });
 
-      this.logger.log(`Notificação criada com ID: ${notification.id}`);
-
       // Processar a notificação
-      this.logger.log(`Processando notificação: ${notification.id}`);
       const emailResult = await this.notificationsService.processNotification(
         notification.id,
-      );
-      this.logger.log(
-        `Resultado do processamento: ${emailResult ? 'Sucesso' : 'Falha'}`,
       );
 
       return {
@@ -266,8 +251,8 @@ export class AuthService {
     };
   }
 
-  async verifyResetToken(data: VerifyTokenDto) {
-    const user = await this.usersService.findByPasswordResetToken(data.token);
+  async verifyResetToken(token: string) {
+    const user = await this.usersService.findByPasswordResetToken(token);
     if (!user) {
       throw new NotFoundException('Token de recuperação inválido ou expirado');
     }
@@ -281,5 +266,43 @@ export class AuthService {
       email: user.email,
       userType: user.role,
     };
+  }
+
+  async loginProfessional(data: any) {
+    const user = await this.usersService.findByEmail(data.email);
+    if (!user || user.role !== 'PROFESSIONAL') {
+      throw new UnauthorizedException('Usuário profissional não encontrado');
+    }
+    const passwordMatch = await bcrypt.compare(data.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Senha inválida');
+    }
+    const payload = { sub: user.id, email: user.email, role: user.role };
+
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
+    }
+    const token = jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
+    return { access_token: token };
+  }
+
+  async loginClient(data: any) {
+    const user = await this.usersService.findByEmail(data.email);
+    if (!user || user.role !== 'CLIENT') {
+      throw new UnauthorizedException('Usuário cliente não encontrado');
+    }
+    const passwordMatch = await bcrypt.compare(data.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Senha inválida');
+    }
+    const payload = { sub: user.id, email: user.email, role: user.role };
+
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
+    }
+    const token = jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
+    return { access_token: token };
   }
 }
