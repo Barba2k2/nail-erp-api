@@ -1,3 +1,42 @@
+# Beauty & Nail Micro-CRM
+
+A specialized CRM system for beauty and nail professionals to manage client relationships, appointments, services, and business operations.
+
+## Project Overview
+
+This Micro-CRM is designed specifically for beauty salons and nail studios, focusing on:
+
+- Client management with detailed profiles and preferences
+- Appointment scheduling and management
+- Service catalog management
+- Business hours and availability settings
+- Automated notifications for appointments
+- Client history tracking
+- Professional dashboard with insights
+
+The application features a responsive design for both desktop and mobile devices, with a modern, clean interface using light and dark themes.
+
+## Key Features
+
+- **Client Management**: Store client details, preferences, and appointment history
+- **Appointment Scheduling**: Book, reschedule, and cancel appointments with conflict prevention
+- **Service Management**: Create and manage service offerings with pricing and duration
+- **Business Settings**: Configure business hours, special days, and blocked time periods
+- **Automated Notifications**: Email notifications for appointment confirmations, reminders, and changes
+- **Client History**: Track client interactions, services, and feedback
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
+- **Professional Dashboard**: View upcoming appointments and business metrics
+
+## Technical Stack
+
+- **Backend**: NestJS with TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT-based authentication system
+- **Notifications**: Email integration via Mailgun and SMS via Twilio
+- **Containerization**: Docker for development and deployment
+
+---
+<br/>
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
